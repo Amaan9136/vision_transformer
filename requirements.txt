@@ -1,0 +1,12 @@
+torch>=2.0.0
+transformers>=4.30.0
+pillow>=9.0.0
+requests>=2.27.0
+chromadb>=0.4.0
+neo4j>=5.0.0
+crewai>=0.1.0
+langchain>=0.1.0
+langchain-ollama>=0.0.1
+matplotlib>=3.5.0
+networkx>=2.8.0
+ipython>=8.0.0
