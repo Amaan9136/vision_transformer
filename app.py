@@ -12,6 +12,8 @@ import torch
 import json
 import uuid
 import requests
+import base64
+import re
 from PIL import Image
 from io import BytesIO
 from datetime import datetime
@@ -48,8 +50,10 @@ class VisionModule:
             if image_path:
                 if image_path.startswith('http'):
                     # Load image from URL
-                    response = requests.get(image_path)
-                    image = Image.open(BytesIO(response.content))
+                    response = requests.get(image_path, timeout=10)
+                    response.raise_for_status()  # Raise an exception for HTTP errors
+                    image_data = response.content
+                    image = Image.open(BytesIO(image_data))
                 else:
                     # Load image from local path
                     image = Image.open(image_path)
@@ -228,6 +232,36 @@ def index():
     """Main page"""
     return render_template('index.html')
 
+def is_base64_image(data_url):
+    """Check if a string is a base64 encoded image URL"""
+    return isinstance(data_url, str) and data_url.startswith('data:image/')
+
+def decode_base64_image(data_url):
+    """Decode a base64 encoded image URL to binary data"""
+    try:
+        # Extract the base64 part
+        pattern = r'data:image/[^;]+;base64,(.+)'
+        match = re.match(pattern, data_url)
+        if match:
+            base64_data = match.group(1)
+            # Decode base64 data
+            return base64.b64decode(base64_data)
+    except Exception as e:
+        logger.error(f"Error decoding base64 image: {e}")
+    return None
+
+def sanitize_filename(filename):
+    """Sanitize a filename to ensure it's safe for filesystem storage"""
+    # Remove any path separators and limit length
+    basename = os.path.basename(filename)
+    # Remove any potentially dangerous characters
+    safe_name = re.sub(r'[^\w\-\.]', '_', basename)
+    # Limit length to avoid "filename too long" errors
+    if len(safe_name) > 50:
+        name, ext = os.path.splitext(safe_name)
+        safe_name = name[:46] + ext if ext else name[:50]
+    return safe_name
+
 @app.route('/analyze', methods=['POST'])
 def analyze_image():
     """API endpoint to analyze an image"""
@@ -239,13 +273,60 @@ def analyze_image():
             # Generate a unique ID for this image
             image_id = f"img_{uuid.uuid4()}"
             
-            # Process the image
-            vision_results = vision_module.process_image(image_path=image_url)
+            # Check if this is a base64 encoded image
+            if is_base64_image(image_url):
+                # Decode base64 data
+                image_data = decode_base64_image(image_url)
+                if not image_data:
+                    return jsonify({"error": "Invalid base64 image data"}), 400
+                
+                # Save base64 image to a file for record keeping
+                filename = f"{uuid.uuid4()}.jpg"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                with open(filepath, 'wb') as f:
+                    f.write(image_data)
+                
+                # Process the image data directly
+                vision_results = vision_module.process_image(image_data=image_data)
+                
+                # Use the file path as source for the record
+                source_path = f"/static/uploads/{filename}"
+            else:
+                try:
+                    # For URLs, download the image first to handle potential errors better
+                    if image_url.startswith('http'):
+                        response = requests.get(image_url, timeout=10)
+                        response.raise_for_status()  # Raise an exception for HTTP errors
+                        
+                        # Get a safe filename from the URL
+                        url_filename = os.path.basename(image_url.split('?')[0])  # Remove query parameters
+                        safe_filename = sanitize_filename(url_filename)
+                        if not safe_filename or safe_filename == '':
+                            safe_filename = 'image.jpg'
+                            
+                        # Create a unique filename to avoid collisions
+                        filename = f"{uuid.uuid4()}_{safe_filename}"
+                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        
+                        # Save the image to a file
+                        with open(filepath, 'wb') as f:
+                            f.write(response.content)
+                        
+                        # Process the image from the saved file
+                        vision_results = vision_module.process_image(image_path=filepath)
+                        source_path = f"/static/uploads/{filename}"
+                    else:
+                        # For local paths, process directly
+                        vision_results = vision_module.process_image(image_path=image_url)
+                        source_path = image_url
+                except requests.exceptions.RequestException as e:
+                    logger.error(f"Error downloading image from URL: {e}")
+                    return jsonify({"error": f"Failed to download image from URL: {str(e)}"}), 400
             
             # Save results to vector database
             metadata = {
                 "label": vision_results['label'],
-                "source": image_url,
+                "source": source_path,
                 "timestamp": datetime.now().isoformat(),
                 "type": "url"
             }

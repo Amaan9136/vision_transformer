@@ -657,3 +657,136 @@ function showError(message) {
         }, 500);
     }, 5000);
 }
+
+// Function to handle pasted content (for base64 images)
+function initializePasteHandling() {
+    const urlInput = document.getElementById('url-input');
+    
+    // Add paste event listener if the URL input exists
+    if (urlInput) {
+        document.addEventListener('paste', function(e) {
+            // Only process paste events when URL tab is active
+            const urlTab = document.getElementById('url-tab');
+            if (urlTab && urlTab.classList.contains('hidden')) {
+                return;
+            }
+            
+            // Get clipboard items
+            const clipboardItems = e.clipboardData.items;
+            
+            for (let i = 0; i < clipboardItems.length; i++) {
+                // Check if the clipboard item is an image
+                if (clipboardItems[i].type.indexOf('image') !== -1) {
+                    // Get the blob from clipboard
+                    const blob = clipboardItems[i].getAsFile();
+                    
+                    // Create a FileReader to read the image as data URL
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        // Set the data URL to the URL input
+                        urlInput.value = event.target.result;
+                        
+                        // Show a notification that an image was pasted
+                        showNotification('Image pasted! Click "Analyze" to process it.', 'info');
+                    };
+                    reader.readAsDataURL(blob);
+                    
+                    // Prevent the default paste behavior
+                    e.preventDefault();
+                    break;
+                }
+            }
+        });
+    }
+}
+
+// Enhanced image URL analyzer with better error handling
+function analyzeImageUrl(url) {
+    // Check if URL is empty
+    if (!url || url.trim() === '') {
+        showNotification('Please enter a valid image URL', 'error');
+        return;
+    }
+    
+    showLoading('Analyzing image...');
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('imageUrl', url);
+    
+    // Send URL to server for analysis
+    fetch('/analyze', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Failed to analyze image');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            displayResults(data);
+        } else {
+            showError(data.error || 'Unknown error occurred while analyzing image');
+        }
+    })
+    .catch(error => {
+        console.error('Error analyzing image URL:', error);
+        hideLoading();
+        showError(error.message || 'Failed to analyze image URL. Please try again.');
+    });
+}
+
+// Show a notification toast
+function showNotification(message, type = 'info') {
+    const toast = document.createElement('div');
+    
+    // Set toast classes based on type
+    let bgColor = 'bg-indigo-500';
+    if (type === 'error') bgColor = 'bg-red-500';
+    else if (type === 'success') bgColor = 'bg-green-500';
+    
+    toast.className = `fixed bottom-4 left-1/2 transform -translate-x-1/2 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    // Remove after 4 seconds
+    setTimeout(() => {
+        toast.classList.add('opacity-0');
+        toast.style.transition = 'opacity 0.5s ease';
+        
+        // Remove from DOM after fade out
+        setTimeout(() => {
+            if (document.body.contains(toast)) {
+                document.body.removeChild(toast);
+            }
+        }, 500);
+    }, 4000);
+}
+
+// Update the DOMContentLoaded event in main.js to include the new function
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize animation effects
+    initializeAnimations();
+    
+    // Initialize event listeners for image scraping
+    initializeImageScraper();
+    
+    // Initialize drag and drop functionality
+    initializeDragAndDrop();
+    
+    // Initialize tab switching
+    initializeTabs();
+    
+    // Initialize search functionality
+    initializeSearch();
+    
+    // Initialize paste handling for base64 images
+    initializePasteHandling();
+});
