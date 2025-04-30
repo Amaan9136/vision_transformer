@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vision Knowledge Explorer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f0f4f8;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.125);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        
+        .drop-area {
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .drop-area:hover, .drop-area.active {
+            border-color: #4f46e5;
+            background-color: rgba(79, 70, 229, 0.05);
+        }
+        
+        .image-card {
+            transition: all 0.3s ease;
+            transform: scale(1);
+            opacity: 0;
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+        
+        .image-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .similarity-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(79, 70, 229, 0.9);
+            color: white;
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .search-bar {
+            border-radius: 50px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
+        .btn-primary {
+            background-color: #4f46e5;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            background-color: #4338ca;
+            transform: translateY(-1px);
+        }
+        
+        .loader {
+            border-top-color: #4f46e5;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .knowledge-panel {
+            animation-delay: 0.2s;
+        }
+        
+        .tabs {
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .tab.active {
+            color: #4f46e5;
+            border-bottom: 2px solid #4f46e5;
+        }
+        
+        .scale-in {
+            animation: scaleIn 0.5s cubic-bezier(0.55, 0.055, 0.675, 0.19) forwards;
+            opacity: 0;
+        }
+        
+        @keyframes scaleIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        
+        #image-preview {
+            max-height: 300px;
+            object-fit: contain;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                padding-left: 16px;
+                padding-right: 16px;
+            }
+            
+            .grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container mx-auto px-4 py-8">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-10">
+            <div class="flex items-center mb-4 md:mb-0">
+                <i class="fas fa-eye text-4xl text-indigo-600 mr-4"></i>
+                <h1 class="text-3xl font-bold text-gray-800">Vision Knowledge Explorer</h1>
+            </div>
+            
+            <div class="search-bar flex items-center w-full md:w-96 bg-white rounded-full px-4 py-2">
+                <i class="fas fa-search text-gray-400 mr-3"></i>
+                <input type="text" id="search-input" placeholder="Search by object label..." class="w-full outline-none bg-transparent">
+                <button id="search-btn" class="ml-2 text-indigo-600 hover:text-indigo-800">
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+        </header>
+        
+        <div class="tabs flex mb-8">
+            <div class="tab active" data-tab="upload">
+                <i class="fas fa-upload mr-2"></i> Upload
+            </div>
+            <div class="tab" data-tab="url">
+                <i class="fas fa-link mr-2"></i> URL
+            </div>
+        </div>
+        
+        <div class="tab-content glass-panel p-6 mb-10">
+            <!-- Upload Tab -->
+            <div id="upload-tab" class="tab-pane">
+                <div class="drop-area flex flex-col items-center justify-center h-64 p-6">
+                    <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                    <p class="text-gray-500 text-center mb-4">Drag & drop an image here or click to browse</p>
+                    <button id="browse-btn" class="btn-primary px-6 py-2 rounded-full">
+                        Browse Files
+                    </button>
+                    <input type="file" id="file-input" accept="image/*" class="hidden">
+                </div>
+            </div>
+            
+            <!-- URL Tab -->
+            <div id="url-tab" class="tab-pane hidden">
+                <div class="flex flex-col">
+                    <label class="text-gray-700 mb-2">Image URL</label>
+                    <div class="flex">
+                        <input type="text" id="url-input" placeholder="https://example.com/image.jpg" 
+                               class="flex-grow p-3 rounded-l-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button id="url-btn" class="btn-primary px-6 py-3 rounded-r-lg">
+                            <i class="fas fa-search mr-2"></i> Analyze
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- Results Section -->
+        <div id="results" class="hidden mb-16">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Analysis Results</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Original Image Analysis -->
+                <div class="col-span-1 glass-panel p-6 scale-in" style="animation-delay: 0s;">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Original Image</h3>
+                    <div class="relative mb-4">
+                        <img id="original-image" src="" alt="Original image" class="w-full h-48 object-cover rounded-lg">
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-gray-600 font-medium">Detected:</span>
+                        <span id="detected-label" class="ml-2 font-bold text-indigo-600"></span>
+                    </div>
+                    <div>
+                        <span class="text-gray-600 font-medium">Confidence:</span>
+                        <span id="confidence-score" class="ml-2"></span>
+                    </div>
+                </div>
+                
+                <!-- Knowledge Base Info -->
+                <div id="knowledge-section" class="col-span-2 glass-panel p-6 scale-in knowledge-panel" style="animation-delay: 0.1s;">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Knowledge Context</h3>
+                    <div id="knowledge-content" class="space-y-4">
+                        <div class="mb-4">
+                            <span class="text-gray-600 font-medium">Type:</span>
+                            <span id="concept-type" class="ml-2"></span>
+                        </div>
+                        <div class="mb-4">
+                            <span class="text-gray-600 font-medium">Description:</span>
+                            <p id="concept-description" class="mt-1 text-gray-700"></p>
+                        </div>
+                        <div>
+                            <h4 class="text-gray-600 font-medium mb-2">Related Concepts:</h4>
+                            <div id="related-concepts" class="grid grid-cols-2 gap-2"></div>
+                        </div>
+                    </div>
+                    <div id="no-knowledge" class="hidden text-gray-500 text-center py-4">
+                        No knowledge context found for this concept.
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Similar Images Section -->
+            <div class="mt-10">
+                <h3 class="text-xl font-semibold text-gray-800 mb-6">Similar Images</h3>
+                <div id="similar-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    <!-- Similar images will be added here -->
+                </div>
+                <div id="no-similar" class="hidden text-gray-500 text-center py-8">
+                    No similar images found.
+                </div>
+            </div>
+        </div>
+        
+        <!-- Search Results -->
+        <div id="search-results" class="hidden mb-16">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">Search Results</h2>
+                <button id="clear-search" class="text-indigo-600 hover:text-indigo-800">
+                    <i class="fas fa-times mr-1"></i> Clear
+                </button>
+            </div>
+            
+            <div id="search-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <!-- Search results will be added here -->
+            </div>
+            <div id="no-results" class="hidden text-gray-500 text-center py-8">
+                No results found. Try a different search term.
+            </div>
+        </div>
+        
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-lg p-8 flex flex-col items-center">
+                <div class="loader w-16 h-16 border-4 border-gray-200 rounded-full animate-spin"></div>
+                <p class="mt-4 text-gray-700 font-medium">Analyzing image...</p>
+            </div>
+        </div>
+        
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM Elements
+            const tabs = document.querySelectorAll('.tab');
+            const tabPanes = document.querySelectorAll('.tab-pane');
+            const dropArea = document.querySelector('.drop-area');
+            const fileInput = document.getElementById('file-input');
+            const browseBtn = document.getElementById('browse-btn');
+            const urlInput = document.getElementById('url-input');
+            const urlBtn = document.getElementById('url-btn');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const resultsSection = document.getElementById('results');
+            const searchBtn = document.getElementById('search-btn');
+            const searchInput = document.getElementById('search-input');
+            const searchResults = document.getElementById('search-results');
+            const searchContainer = document.getElementById('search-container');
+            const noResults = document.getElementById('no-results');
+            const clearSearchBtn = document.getElementById('clear-search');
+            const originalImage = document.getElementById('original-image');
+            const detectedLabel = document.getElementById('detected-label');
+            const confidenceScore = document.getElementById('confidence-score');
+            const conceptType = document.getElementById('concept-type');
+            const conceptDescription = document.getElementById('concept-description');
+            const relatedConcepts = document.getElementById('related-concepts');
+            const knowledgeContent = document.getElementById('knowledge-content');
+            const noKnowledge = document.getElementById('no-knowledge');
+            const similarContainer = document.getElementById('similar-container');
+            const noSimilar = document.getElementById('no-similar');
+            
+            // Tab switching
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    const tabId = tab.getAttribute('data-tab');
+                    tabPanes.forEach(pane => {
+                        pane.classList.add('hidden');
+                    });
+                    document.getElementById(`${tabId}-tab`).classList.remove('hidden');
+                });
+            });
+            
+            // File Drag & Drop
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, () => {
+                    dropArea.classList.add('active');
+                });
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, () => {
+                    dropArea.classList.remove('active');
+                });
+            });
+            
+            dropArea.addEventListener('drop', handleDrop);
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files.length > 0 && files[0].type.startsWith('image/')) {
+                    handleImageFile(files[0]);
+                }
+            }
+            
+            // Browse files button
+            browseBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleImageFile(e.target.files[0]);
+                }
+            });
+            
+            // URL input button
+            urlBtn.addEventListener('click', () => {
+                const imageUrl = urlInput.value.trim();
+                if (imageUrl) {
+                    analyzeImageUrl(imageUrl);
+                }
+            });
+            
+            // Handle image file
+            function handleImageFile(file) {
+                showLoading();
+                
+                const formData = new FormData();
+                formData.append('imageFile', file);
+                
+                fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    handleAnalysisResults(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    hideLoading();
+                    alert('An error occurred while analyzing the image.');
+                });
+            }
+            
+            // Analyze image URL
+            function analyzeImageUrl(url) {
+                showLoading();
+                
+                const formData = new FormData();
+                formData.append('imageUrl', url);
+                
+                fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    handleAnalysisResults(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    hideLoading();
+                    alert('An error occurred while analyzing the image URL.');
+                });
+            }
+            
+
+            // Search functionality
+            searchBtn.addEventListener('click', performSearch);
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    performSearch();
+                }
+            });
+            
+            clearSearchBtn.addEventListener('click', () => {
+                searchResults.classList.add('hidden');
+                resultsSection.classList.remove('hidden');
+                searchInput.value = '';
+            });
+            
+            function performSearch() {
+                const searchTerm = searchInput.value.trim();
+                if (!searchTerm) return;
+                
+                showLoading();
+                
+                fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ term: searchTerm })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    handleSearchResults(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    hideLoading();
+                    alert('An error occurred while searching.');
+                });
+            }
+            
+            // Handle search results
+            function handleSearchResults(data) {
+                hideLoading();
+                
+                if (data.success) {
+                    resultsSection.classList.add('hidden');
+                    searchResults.classList.remove('hidden');
+                    
+                    searchContainer.innerHTML = '';
+                    
+                    if (data.results && data.results.length > 0) {
+                        noResults.classList.add('hidden');
+                        
+                        data.results.forEach((result, index) => {
+                            // Add animation delay based on index
+                            const delay = index * 0.1;
+                            
+                            const card = document.createElement('div');
+                            card.className = 'image-card glass-panel p-4 rounded-lg overflow-hidden relative';
+                            card.style.animationDelay = `${delay}s`;
+                            
+                            const img = document.createElement('img');
+                            img.src = result.source;
+                            img.alt = result.label;
+                            img.className = 'w-full h-40 object-cover rounded-lg mb-3';
+                            
+                            const label = document.createElement('p');
+                            label.className = 'text-gray-800 font-medium truncate';
+                            label.textContent = result.label;
+                            
+                            card.appendChild(img);
+                            card.appendChild(label);
+                            
+                            // Add click event to analyze this image
+                            card.addEventListener('click', () => {
+                                analyzeImageUrl(result.source);
+                            });
+                            
+                            searchContainer.appendChild(card);
+                        });
+                    } else {
+                        noResults.classList.remove('hidden');
+                    }
+                }
+            }
+            
+            // Handle analysis results
+            function handleAnalysisResults(data) {
+                hideLoading();
+                
+                if (data.success) {
+                    searchResults.classList.add('hidden');
+                    resultsSection.classList.remove('hidden');
+                    
+                    // Update original image section
+                    originalImage.src = data.image.source;
+                    detectedLabel.textContent = data.image.label;
+                    confidenceScore.textContent = `${data.image.confidence}%`;
+                    
+                    // Update knowledge section
+                    if (data.knowledge && Object.keys(data.knowledge).length > 0) {
+                        knowledgeContent.classList.remove('hidden');
+                        noKnowledge.classList.add('hidden');
+                        
+                        conceptType.textContent = data.knowledge.type || 'Unknown';
+                        conceptDescription.textContent = data.knowledge.description || 'No description available.';
+                        
+                        // Related concepts
+                        relatedConcepts.innerHTML = '';
+                        
+                        if (data.knowledge.relations && data.knowledge.relations.length > 0) {
+                            data.knowledge.relations.forEach(relation => {
+                                const badge = document.createElement('div');
+                                badge.className = 'bg-indigo-100 text-indigo-800 rounded-full px-3 py-1 text-sm flex items-center';
+                                
+                                const icon = document.createElement('i');
+                                icon.className = 'fas fa-link mr-2 text-indigo-600 text-xs';
+                                
+                                const text = document.createElement('span');
+                                text.textContent = `${relation.relationship}: ${relation.related_concept}`;
+                                
+                                badge.appendChild(icon);
+                                badge.appendChild(text);
+                                relatedConcepts.appendChild(badge);
+                            });
+                        } else {
+                            const noConcepts = document.createElement('p');
+                            noConcepts.className = 'text-gray-500';
+                            noConcepts.textContent = 'No related concepts found.';
+                            relatedConcepts.appendChild(noConcepts);
+                        }
+                    } else {
+                        knowledgeContent.classList.add('hidden');
+                        noKnowledge.classList.remove('hidden');
+                    }
+                    
+                    // Similar images
+                    similarContainer.innerHTML = '';
+                    
+                    if (data.similar_images && data.similar_images.length > 0) {
+                        noSimilar.classList.add('hidden');
+                        
+                        data.similar_images.forEach((image, index) => {
+                            // Add animation delay based on index
+                            const delay = index * 0.1;
+                            
+                            const card = document.createElement('div');
+                            card.className = 'image-card glass-panel p-4 rounded-lg overflow-hidden relative';
+                            card.style.animationDelay = `${delay}s`;
+                            
+                            const img = document.createElement('img');
+                            img.src = image.source;
+                            img.alt = image.label;
+                            img.className = 'w-full h-40 object-cover rounded-lg mb-3';
+                            
+                            const badge = document.createElement('div');
+                            badge.className = 'similarity-badge';
+                            badge.textContent = `${image.similarity}%`;
+                            
+                            const label = document.createElement('p');
+                            label.className = 'text-gray-800 font-medium truncate';
+                            label.textContent = image.label;
+                            
+                            card.appendChild(img);
+                            card.appendChild(badge);
+                            card.appendChild(label);
+                            
+                            // Add click event to analyze this image
+                            card.addEventListener('click', () => {
+                                analyzeImageUrl(image.source);
+                            });
+                            
+                            similarContainer.appendChild(card);
+                        });
+                    } else {
+                        noSimilar.classList.remove('hidden');
+                    }
+                    
+                    // Scroll to results
+                    resultsSection.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+            
+            // Loading helpers
+            function showLoading() {
+                loadingOverlay.classList.remove('hidden');
+            }
+            
+            function hideLoading() {
+                loadingOverlay.classList.add('hidden');
+            }
+            
+        });
+    </script>
+</body>
+</html>
