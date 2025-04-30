@@ -17,112 +17,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize search functionality
     initializeSearch();
     
+    // Initialize "Find More Similar" functionality
+    initializeMoreSimilarImages();
+    
+    // Initialize paste handling for base64 images
+    initializePasteHandling();
+    
+    // Initialize web scraping button
+    initializeWebScrapingButton();
 });
-
-// Initialize tab switching functionality
-function initializeTabs() {
-    const tabs = document.querySelectorAll('.tab');
-    const tabPanes = document.querySelectorAll('.tab-pane');
-    
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            // Remove active class from all tabs
-            tabs.forEach(t => t.classList.remove('active'));
-            
-            // Add active class to clicked tab
-            tab.classList.add('active');
-            
-            // Hide all tab panes
-            tabPanes.forEach(pane => {
-                pane.classList.add('hidden');
-            });
-            
-            // Show the corresponding tab pane
-            const tabId = tab.getAttribute('data-tab');
-            document.getElementById(`${tabId}-tab`).classList.remove('hidden');
-        });
-    });
-}
-
-// Initialize drag and drop functionality
-function initializeDragAndDrop() {
-    const dropArea = document.querySelector('.drop-area');
-    const fileInput = document.getElementById('file-input');
-    const browseBtn = document.getElementById('browse-btn');
-    
-    if (dropArea && fileInput && browseBtn) {
-        // Prevent default behaviors for drag events
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, preventDefaults, false);
-        });
-        
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-        
-        // Highlight drop area when file is dragged over
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => {
-                dropArea.classList.add('active');
-            });
-        });
-        
-        // Remove highlight when file is dragged out or dropped
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => {
-                dropArea.classList.remove('active');
-            });
-        });
-        
-        // Handle file drop
-        dropArea.addEventListener('drop', (e) => {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            
-            if (files.length > 0 && files[0].type.startsWith('image/')) {
-                handleImageFile(files[0]);
-            }
-        });
-        
-        // Handle browse files click
-        browseBtn.addEventListener('click', () => {
-            fileInput.click();
-        });
-        
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleImageFile(e.target.files[0]);
-            }
-        });
-        
-        // Handle image file upload
-        function handleImageFile(file) {
-            // Show loading state
-            showLoading('Analyzing image...');
-            
-            // Create form data
-            const formData = new FormData();
-            formData.append('imageFile', file);
-            
-            // Send file to server for analysis
-            fetch('/analyze', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                hideLoading();
-                displayResults(data);
-            })
-            .catch(error => {
-                console.error('Error analyzing image:', error);
-                hideLoading();
-                showError('Failed to analyze image. Please try again.');
-            });
-        }
-    }
-}
 
 // Initialize search functionality
 function initializeSearch() {
@@ -770,23 +673,107 @@ function showNotification(message, type = 'info') {
     }, 4000);
 }
 
-// Update the DOMContentLoaded event in main.js to include the new function
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize animation effects
-    initializeAnimations();
+// Initialize tab switching functionality
+function initializeTabs() {
+    const tabs = document.querySelectorAll('.tab');
+    const tabPanes = document.querySelectorAll('.tab-pane');
     
-    // Initialize event listeners for image scraping
-    initializeImageScraper();
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Remove active class from all tabs
+            tabs.forEach(t => t.classList.remove('active'));
+            
+            // Add active class to clicked tab
+            tab.classList.add('active');
+            
+            // Hide all tab panes
+            tabPanes.forEach(pane => {
+                pane.classList.add('hidden');
+            });
+            
+            // Show the corresponding tab pane
+            const tabId = tab.getAttribute('data-tab');
+            document.getElementById(`${tabId}-tab`).classList.remove('hidden');
+        });
+    });
+}
+
+// Initialize drag and drop functionality
+function initializeDragAndDrop() {
+    const dropArea = document.querySelector('.drop-area');
+    const fileInput = document.getElementById('file-input');
+    const browseBtn = document.getElementById('browse-btn');
     
-    // Initialize drag and drop functionality
-    initializeDragAndDrop();
-    
-    // Initialize tab switching
-    initializeTabs();
-    
-    // Initialize search functionality
-    initializeSearch();
-    
-    // Initialize paste handling for base64 images
-    initializePasteHandling();
-});
+    if (dropArea && fileInput && browseBtn) {
+        // Prevent default behaviors for drag events
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        // Highlight drop area when file is dragged over
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.add('active');
+            });
+        });
+        
+        // Remove highlight when file is dragged out or dropped
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.remove('active');
+            });
+        });
+        
+        // Handle file drop
+        dropArea.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                handleImageFile(files[0]);
+            }
+        });
+        
+        // Handle browse files click
+        browseBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleImageFile(e.target.files[0]);
+            }
+        });
+        
+        // Handle image file upload
+        function handleImageFile(file) {
+            // Show loading state
+            showLoading('Analyzing image...');
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('imageFile', file);
+            
+            // Send file to server for analysis
+            fetch('/analyze', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                displayResults(data);
+            })
+            .catch(error => {
+                console.error('Error analyzing image:', error);
+                hideLoading();
+                showError('Failed to analyze image. Please try again.');
+            });
+        }
+    }
+}

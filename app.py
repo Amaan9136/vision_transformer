@@ -20,6 +20,9 @@ from datetime import datetime
 from transformers import ViTForImageClassification, ViTImageProcessor
 import chromadb
 from flask import Flask, render_template, request, jsonify
+import urllib.parse
+from bs4 import BeautifulSoup
+import concurrent.futures
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -32,6 +35,9 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# User agent for scraping
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 
 # ---- 1. Vision Transformer Setup ----
 
@@ -220,12 +226,163 @@ class SimpleKnowledgeBase:
         # No match found
         return {}
 
+# ---- 4. Web Scraper for Similar Images ----
+
+class ImageScraper:
+    """Scrapes similar images from the web based on keywords or an image"""
+    
+    def __init__(self):
+        self.headers = {
+            'User-Agent': USER_AGENT
+        }
+    
+    def scrape_images_by_keyword(self, keyword, limit=5):
+        """Scrape images based on a keyword search"""
+        try:
+            logger.info(f"Scraping images for keyword: {keyword}")
+            
+            # Format the search query
+            search_query = urllib.parse.quote(f"{keyword}")
+            search_url = f"https://www.bing.com/images/search?q={search_query}&form=HDRSC2&first=1"
+            
+            response = requests.get(search_url, headers=self.headers, timeout=15)
+            response.raise_for_status()
+            
+            # Parse the response
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Extract image URLs
+            images = []
+            image_elements = soup.select('.mimg')
+            
+            for element in image_elements:
+                if len(images) >= limit:
+                    break
+                    
+                img_src = element.get('src') or element.get('data-src')
+                if img_src and img_src.startswith('http'):
+                    # Validate image URL
+                    try:
+                        # Attempt to get image headers to check if it's a valid image
+                        img_head = requests.head(img_src, headers=self.headers, timeout=5)
+                        content_type = img_head.headers.get('content-type', '')
+                        
+                        if 'image' in content_type:
+                            images.append({
+                                'source': img_src,
+                                'label': keyword
+                            })
+                    except Exception as e:
+                        logger.warning(f"Skipping invalid image URL: {e}")
+                        continue
+            
+            # If we don't have enough images yet, try a different selector
+            if len(images) < limit:
+                img_tags = soup.select('img.mimg')
+                for img in img_tags:
+                    if len(images) >= limit:
+                        break
+                        
+                    img_src = img.get('src') or img.get('data-src')
+                    if img_src and img_src.startswith('http') and img_src not in [img['source'] for img in images]:
+                        # Validate image URL
+                        try:
+                            img_head = requests.head(img_src, headers=self.headers, timeout=5)
+                            content_type = img_head.headers.get('content-type', '')
+                            
+                            if 'image' in content_type:
+                                images.append({
+                                    'source': img_src,
+                                    'label': keyword
+                                })
+                        except Exception as e:
+                            logger.warning(f"Skipping invalid image URL: {e}")
+                            continue
+            
+            logger.info(f"Found {len(images)} images for keyword: {keyword}")
+            return images
+            
+        except Exception as e:
+            logger.error(f"Error scraping images for keyword {keyword}: {e}")
+            return []
+    
+    def scrape_similar_images(self, image_url=None, label=None, limit=5):
+        """Find similar images based on an existing image or a label"""
+        # If we have a label, use it for keyword search
+        if label:
+            return self.scrape_images_by_keyword(label, limit)
+        elif image_url:
+            # For image-based search, we'll use the image URL to extract a label first
+            # This is a simplification; actual reverse image search would be more complex
+            vision_results = vision_module.process_image(image_path=image_url)
+            label = vision_results['label']
+            return self.scrape_images_by_keyword(label, limit)
+        else:
+            logger.error("Either image_url or label must be provided")
+            return []
+    
+    def scrape_images_concurrent(self, keywords, limit_per_keyword=1):
+        """Scrape images for multiple keywords concurrently"""
+        results = []
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            # Create a dictionary mapping futures to their corresponding keywords
+            future_to_keyword = {
+                executor.submit(self.scrape_images_by_keyword, keyword, limit_per_keyword): keyword
+                for keyword in keywords
+            }
+            
+            for future in concurrent.futures.as_completed(future_to_keyword):
+                keyword = future_to_keyword[future]
+                try:
+                    images = future.result()
+                    results.extend(images)
+                    logger.info(f"Collected {len(images)} images for keyword: {keyword}")
+                except Exception as e:
+                    logger.error(f"Error collecting images for keyword {keyword}: {e}")
+        
+        return results
+    
+    def download_image(self, image_url):
+        """Download an image from a URL and save it to the uploads folder"""
+        try:
+            response = requests.get(image_url, headers=self.headers, timeout=10)
+            response.raise_for_status()
+            
+            # Create a unique filename
+            file_extension = self._get_file_extension(response.headers.get('content-type', 'image/jpeg'))
+            filename = f"scraped_{uuid.uuid4()}{file_extension}"
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            # Save the image
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
+            
+            return f"/static/uploads/{filename}"
+        except Exception as e:
+            logger.error(f"Error downloading image {image_url}: {e}")
+            return None
+    
+    def _get_file_extension(self, content_type):
+        """Get the file extension based on content type"""
+        if 'jpeg' in content_type or 'jpg' in content_type:
+            return '.jpg'
+        elif 'png' in content_type:
+            return '.png'
+        elif 'gif' in content_type:
+            return '.gif'
+        elif 'webp' in content_type:
+            return '.webp'
+        else:
+            return '.jpg'  # Default to jpg
+
 # Initialize modules globally for the Flask app
 vision_module = VisionModule()
 vector_db = VectorDB()
 knowledge_base = SimpleKnowledgeBase()
+image_scraper = ImageScraper()
 
-# ---- 4. Flask Routes ----
+# ---- 5. Flask Routes ----
 
 @app.route('/')
 def index():
@@ -368,10 +525,10 @@ def analyze_image():
         # Query knowledge base
         knowledge_info = knowledge_base.query_knowledge(vision_results['label'])
         
-        # Find similar images
+        # Find similar images from the vector database
         similar_results = vector_db.find_similar(vision_results['image_embedding'])
         
-        # Prepare similar images data
+        # Prepare similar images data from the vector database
         similar_images = []
         if similar_results['ids'] and similar_results['ids'][0]:
             for i, img_id in enumerate(similar_results['ids'][0]):
@@ -385,8 +542,35 @@ def analyze_image():
                         "label": metadata.get('label', 'Unknown'),
                         "source": metadata.get('source', ''),
                         "similarity": round(similarity_score * 100, 2),
-                        "type": metadata.get('type', 'unknown')
+                        "type": metadata.get('type', 'unknown'),
+                        "origin": "database"
                     })
+        
+        # Find similar images from the web using the image scraper
+        web_images = []
+        try:
+            # Use the label for searching similar images
+            web_images = image_scraper.scrape_similar_images(label=vision_results['label'], limit=5)
+            
+            # Add metadata to the web images
+            for i, img in enumerate(web_images):
+                img['id'] = f"web_{uuid.uuid4()}"
+                img['similarity'] = 100 - (i * 5)  # Mock similarity score decreasing by 5% for each result
+                img['type'] = 'web'
+                img['origin'] = 'web'
+                
+                # Save the web image locally to avoid CORS issues
+                local_path = image_scraper.download_image(img['source'])
+                if local_path:
+                    img['source'] = local_path
+        except Exception as e:
+            logger.error(f"Error scraping web images: {e}")
+        
+        # Combine local and web images, prioritizing local ones
+        all_similar_images = similar_images + web_images
+        
+        # Sort by similarity score and limit to 9 results
+        all_similar_images = sorted(all_similar_images, key=lambda x: x['similarity'], reverse=True)[:9]
         
         # Return the results
         return jsonify({
@@ -398,7 +582,7 @@ def analyze_image():
                 "source": metadata['source']
             },
             "knowledge": knowledge_info,
-            "similar_images": similar_images
+            "similar_images": all_similar_images
         })
         
     except Exception as e:
@@ -432,16 +616,84 @@ def search_similar():
                         "label": metadata.get('label', 'Unknown'),
                         "source": metadata.get('source', ''),
                         "type": metadata.get('type', 'unknown'),
-                        "timestamp": metadata.get('timestamp', '')
+                        "timestamp": metadata.get('timestamp', ''),
+                        "origin": "database"
                     })
+        
+        # Add web search results
+        web_results = []
+        try:
+            web_images = image_scraper.scrape_images_by_keyword(search_term, limit=5)
+            
+            for img in web_images:
+                img['id'] = f"web_{uuid.uuid4()}"
+                img['type'] = 'web'
+                img['origin'] = 'web'
+                img['timestamp'] = datetime.now().isoformat()
+                
+                # Save the web image locally to avoid CORS issues
+                local_path = image_scraper.download_image(img['source'])
+                if local_path:
+                    img['source'] = local_path
+                    web_results.append(img)
+        except Exception as e:
+            logger.error(f"Error getting web search results: {e}")
+        
+        # Combine results, prioritizing database results
+        all_results = results + web_results
         
         return jsonify({
             "success": True,
-            "results": results
+            "results": all_results
         })
         
     except Exception as e:
         logger.error(f"Error in search_similar: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/scrape-similar', methods=['POST'])
+def scrape_similar_images():
+    """API endpoint to scrape similar images from the web"""
+    try:
+        # Get the label or image URL from the request
+        label = request.json.get('label')
+        image_url = request.json.get('imageUrl')
+        
+        if not label and not image_url:
+            return jsonify({"error": "Either label or imageUrl must be provided"}), 400
+        
+        # Scrape similar images using our image scraper
+        web_images = image_scraper.scrape_similar_images(
+            image_url=image_url,
+            label=label,
+            limit=5
+        )
+        
+        # Process and save the images locally
+        processed_images = []
+        for img in web_images:
+            try:
+                # Save the web image locally to avoid CORS issues
+                local_path = image_scraper.download_image(img['source'])
+                if local_path:
+                    processed_images.append({
+                        "id": f"web_{uuid.uuid4()}",
+                        "label": img['label'],
+                        "source": local_path,
+                        "type": "web",
+                        "origin": "web",
+                        "similarity": 95  # Mock similarity score
+                    })
+            except Exception as e:
+                logger.warning(f"Error processing scraped image: {e}")
+        
+        return jsonify({
+            "success": True,
+            "images": processed_images
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in scrape_similar_images: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":

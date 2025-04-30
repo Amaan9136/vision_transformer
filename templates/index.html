@@ -56,6 +56,18 @@
             font-size: 12px;
             font-weight: 600;
         }
+
+        .web-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(59, 130, 246, 0.9);
+            color: white;
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 600;
+        }
         
         .search-bar {
             border-radius: 50px;
@@ -70,6 +82,17 @@
         
         .btn-primary:hover {
             background-color: #4338ca;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: #3b82f6;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #2563eb;
             transform: translateY(-1px);
         }
         
@@ -121,6 +144,23 @@
         #image-preview {
             max-height: 300px;
             object-fit: contain;
+        }
+
+        .web-scraped-image {
+            border: 2px solid #3b82f6;
+        }
+
+        .pulse-button {
+            animation: pulse-animation 2s infinite;
+        }
+        
+        @keyframes pulse-animation {
+            0% {
+                box-shadow: 0 0 0 0px rgba(59, 130, 246, 0.4);
+            }
+            100% {
+                box-shadow: 0 0 0 15px rgba(59, 130, 246, 0);
+            }
         }
         
         /* Responsive adjustments */
@@ -192,6 +232,11 @@
                             <i class="fas fa-search mr-2"></i> Analyze
                         </button>
                     </div>
+                    <div class="mt-4">
+                        <button id="scan-page-btn" class="btn-secondary px-6 py-2 rounded-full w-full">
+                            <i class="fas fa-globe mr-2"></i> Web Search for Images
+                        </button>
+                    </div>
                 </div>
             </div>
             
@@ -243,7 +288,14 @@
             
             <!-- Similar Images Section -->
             <div class="mt-10">
-                <h3 class="text-xl font-semibold text-gray-800 mb-6">Similar Images</h3>
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-semibold text-gray-800">Similar Images</h3>
+                    <div id="scrape-button-container" class="flex">
+                        <button id="scrape-more-images" class="btn-secondary px-4 py-2 text-sm rounded-full flex items-center pulse-button">
+                            <i class="fas fa-globe-americas mr-2"></i> Find 5 More Similar Images from Web
+                        </button>
+                    </div>
+                </div>
                 <div id="similar-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                     <!-- Similar images will be added here -->
                 </div>
@@ -274,12 +326,13 @@
         <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
             <div class="bg-white rounded-lg p-8 flex flex-col items-center">
                 <div class="loader w-16 h-16 border-4 border-gray-200 rounded-full animate-spin"></div>
-                <p class="mt-4 text-gray-700 font-medium">Analyzing image...</p>
+                <p id="loading-message" class="mt-4 text-gray-700 font-medium">Analyzing image...</p>
             </div>
         </div>
         
     </div>
     
+    <script src="/static/js/main.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // DOM Elements
