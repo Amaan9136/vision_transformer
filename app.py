@@ -57,11 +57,15 @@ class VisionModule:
             # Get the predicted class label
             label = self.model.config.id2label[predicted_class_id]
             
+            # Create embedding from the logits instead of last_hidden_state
+            # This is a simple embedding created from the output logits
+            embedding = logits[0].tolist()
+            
             # Return the detected object/concept
             return {
                 "label": label,
                 "confidence": logits.softmax(dim=-1)[0][predicted_class_id].item(),
-                "image_embedding": outputs.last_hidden_state.mean(dim=1).squeeze().tolist()
+                "image_embedding": embedding
             }
         except Exception as e:
             logger.error(f"Error processing image: {e}")
