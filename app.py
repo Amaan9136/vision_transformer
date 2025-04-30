@@ -122,7 +122,7 @@ class KnowledgeGraph:
 # ---- 4. CrewAI Orchestration ----
 
 # Initialize language model for CrewAI
-llm = Ollama(model="llama3.2:latest", base_url="http://localhost:11434")
+llm = Ollama(model="mistral:latest", base_url="http://localhost:11434")
 
 # Define CrewAI agents
 vision_agent = Agent(

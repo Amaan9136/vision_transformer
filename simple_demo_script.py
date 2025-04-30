@@ -170,7 +170,7 @@ class SimpleKnowledgeBase:
 # ---- 4. Ollama Integration ----
 
 class OllamaHelper:
-    def __init__(self, model_name="llama3.2:latest"):
+    def __init__(self, model_name="mistral:latest"):
         print(f"Initializing Ollama with model {model_name}...")
         self.llm = Ollama(model=model_name, base_url="http://localhost:11434")
         print("Ollama initialized!")
@@ -208,7 +208,7 @@ class OllamaHelper:
 # ---- 5. Main Application ----
 
 class SimpleVisionKnowledgeExplorer:
-    def __init__(self, model_name="llama3.2:latest"):
+    def __init__(self, model_name="mistral:latest"):
         print("Initializing Simple Vision Knowledge Explorer...")
         self.vision_module = SimpleVisionModule()
         self.vector_db = SimpleVectorDB()
@@ -258,7 +258,7 @@ def main():
     # Initialize the explorer with the specified model
     print("What Ollama model would you like to use? (Default: llama3.2)")
     print("Options: llama3.2, llama3.2:8b, llama3.2:11b, phi3:mini, etc.")
-    model_name = input("Model name: ").strip() or "llama3.2:latest"
+    model_name = input("Model name: ").strip() or "mistral:latest"
     
     explorer = SimpleVisionKnowledgeExplorer(model_name)
     
