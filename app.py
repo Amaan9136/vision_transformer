@@ -7,64 +7,77 @@ and provide insightful descriptions.
 """
 
 import os
+import logging
 import torch
 from PIL import Image
 import requests
 from io import BytesIO
 from transformers import ViTForImageClassification, ViTImageProcessor
 import chromadb
-from neo4j import GraphDatabase
 from crewai import Agent, Task, Crew, Process
-from langchain.llms import Ollama
+from langchain_ollama import OllamaLLM  # Updated import
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # ---- 1. Vision Transformer Setup ----
 
 class VisionModule:
     def __init__(self):
         # Load pre-trained Vision Transformer model
+        logger.info("Initializing Vision Transformer model...")
         self.model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
         self.processor = ViTImageProcessor.from_pretrained('google/vit-base-patch16-224')
+        logger.info("Vision Transformer model loaded successfully!")
     
     def process_image(self, image_path):
         """Process an image and return detected objects/concepts"""
-        if image_path.startswith('http'):
-            # Load image from URL
-            response = requests.get(image_path)
-            image = Image.open(BytesIO(response.content))
-        else:
-            # Load image from local path
-            image = Image.open(image_path)
-        
-        # Preprocess the image
-        inputs = self.processor(images=image, return_tensors="pt")
-        
-        # Get model predictions
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            logits = outputs.logits
+        logger.info(f"Processing image: {image_path}")
+        try:
+            if image_path.startswith('http'):
+                # Load image from URL
+                response = requests.get(image_path)
+                image = Image.open(BytesIO(response.content))
+            else:
+                # Load image from local path
+                image = Image.open(image_path)
             
-        # Get the predicted class ID
-        predicted_class_id = logits.argmax(-1).item()
-        
-        # Get the predicted class label
-        label = self.model.config.id2label[predicted_class_id]
-        
-        # Return the detected object/concept
-        return {
-            "label": label,
-            "confidence": logits.softmax(dim=-1)[0][predicted_class_id].item(),
-            "image_embedding": outputs.last_hidden_state.mean(dim=1).squeeze().tolist()
-        }
+            # Preprocess the image
+            inputs = self.processor(images=image, return_tensors="pt")
+            
+            # Get model predictions
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                logits = outputs.logits
+                
+            # Get the predicted class ID
+            predicted_class_id = logits.argmax(-1).item()
+            
+            # Get the predicted class label
+            label = self.model.config.id2label[predicted_class_id]
+            
+            # Return the detected object/concept
+            return {
+                "label": label,
+                "confidence": logits.softmax(dim=-1)[0][predicted_class_id].item(),
+                "image_embedding": outputs.last_hidden_state.mean(dim=1).squeeze().tolist()
+            }
+        except Exception as e:
+            logger.error(f"Error processing image: {e}")
+            raise
 
 # ---- 2. Vector Database Setup ----
 
 class VectorDB:
     def __init__(self):
         # Initialize ChromaDB
+        logger.info("Initializing ChromaDB...")
         self.client = chromadb.Client()
         
         # Create a collection for image embeddings
         self.collection = self.client.create_collection(name="image_embeddings")
+        logger.info("ChromaDB initialized successfully!")
     
     def add_image_data(self, image_id, embedding, metadata=None):
         """Add image embedding to vector database"""
@@ -82,47 +95,92 @@ class VectorDB:
         )
         return results
 
-# ---- 3. Knowledge Graph Setup ----
+# ---- 3. Simplified Knowledge Base ----
 
-class KnowledgeGraph:
-    def __init__(self, uri="bolt://localhost:7687", user="neo4j", password="password"):
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+class SimpleKnowledgeBase:
+    """A simplified knowledge base that doesn't require Neo4j"""
     
-    def close(self):
-        self.driver.close()
+    def __init__(self):
+        # Initialize with a dictionary of concepts and their properties
+        self.knowledge = {
+            "car": {
+                "type": "vehicle",
+                "powered_by": "engine",
+                "relations": [
+                    {"relationship": "HAS_PART", "related_concept": "wheel", "related_labels": ["Component"]},
+                    {"relationship": "HAS_PART", "related_concept": "engine", "related_labels": ["Component"]},
+                    {"relationship": "IS_A", "related_concept": "vehicle", "related_labels": ["Category"]}
+                ]
+            },
+            "tesla": {
+                "type": "electric vehicle",
+                "manufacturer": "Tesla, Inc.",
+                "founder": "Elon Musk",
+                "relations": [
+                    {"relationship": "IS_A", "related_concept": "car", "related_labels": ["Category"]},
+                    {"relationship": "USES", "related_concept": "electricity", "related_labels": ["Energy"]},
+                    {"relationship": "MANUFACTURED_BY", "related_concept": "Tesla, Inc.", "related_labels": ["Company"]}
+                ]
+            },
+            "smartphone": {
+                "type": "electronic device",
+                "purpose": "communication",
+                "relations": [
+                    {"relationship": "HAS_COMPONENT", "related_concept": "screen", "related_labels": ["Component"]},
+                    {"relationship": "HAS_COMPONENT", "related_concept": "camera", "related_labels": ["Component"]},
+                    {"relationship": "HAS_FUNCTION", "related_concept": "communication", "related_labels": ["Function"]}
+                ]
+            },
+            "laptop": {
+                "type": "electronic device",
+                "purpose": "computing",
+                "relations": [
+                    {"relationship": "HAS_COMPONENT", "related_concept": "keyboard", "related_labels": ["Component"]},
+                    {"relationship": "HAS_COMPONENT", "related_concept": "screen", "related_labels": ["Component"]},
+                    {"relationship": "HAS_FUNCTION", "related_concept": "computing", "related_labels": ["Function"]}
+                ]
+            },
+            "tree": {
+                "type": "plant",
+                "category": "nature",
+                "relations": [
+                    {"relationship": "HAS_PART", "related_concept": "leaf", "related_labels": ["Component"]},
+                    {"relationship": "HAS_PART", "related_concept": "trunk", "related_labels": ["Component"]},
+                    {"relationship": "IS_A", "related_concept": "plant", "related_labels": ["Category"]}
+                ]
+            },
+            "dog": {
+                "type": "animal",
+                "category": "pet",
+                "relations": [
+                    {"relationship": "IS_A", "related_concept": "mammal", "related_labels": ["Category"]},
+                    {"relationship": "HAS_PART", "related_concept": "tail", "related_labels": ["Component"]},
+                    {"relationship": "BELONGS_TO", "related_concept": "canidae", "related_labels": ["Family"]}
+                ]
+            }
+        }
     
     def query_knowledge(self, concept):
-        """Query knowledge graph for information about a concept"""
-        with self.driver.session() as session:
-            # Example Cypher query to find information about a concept
-            result = session.run(
-                """
-                MATCH (c:Concept {name: $concept})-[r]-(related)
-                RETURN type(r) as relationship, related.name as related_concept,
-                       labels(related) as related_labels
-                LIMIT 10
-                """,
-                concept=concept
-            )
-            return [dict(record) for record in result]
-    
-    def add_concept(self, concept, properties=None):
-        """Add a concept to the knowledge graph"""
-        with self.driver.session() as session:
-            session.run(
-                """
-                MERGE (c:Concept {name: $concept})
-                SET c += $properties
-                RETURN c
-                """,
-                concept=concept,
-                properties=properties or {}
-            )
+        """Query knowledge base for information about a concept"""
+        # Normalize the concept (lowercase) for matching
+        concept = concept.lower()
+        
+        # Check for exact match
+        if concept in self.knowledge:
+            return self.knowledge[concept].get("relations", [])
+        
+        # Check for partial matches
+        for key in self.knowledge:
+            if key in concept or concept in key:
+                return self.knowledge[key].get("relations", [])
+        
+        # No match found
+        return []
 
 # ---- 4. CrewAI Orchestration ----
 
 # Initialize language model for CrewAI
-llm = Ollama(model="mistral:latest", base_url="http://localhost:11434")
+llm = OllamaLLM(model="mistral:latest", base_url="http://localhost:11434")
 
 # Define CrewAI agents
 vision_agent = Agent(
@@ -143,8 +201,8 @@ vector_search_agent = Agent(
 
 knowledge_agent = Agent(
     role="Knowledge Navigator",
-    goal="Extract relevant information from the knowledge graph",
-    backstory="I navigate complex knowledge structures to find contextual information and connections.",
+    goal="Extract relevant information from the knowledge base",
+    backstory="I navigate knowledge structures to find contextual information and connections.",
     verbose=True,
     llm=llm
 )
@@ -173,7 +231,7 @@ find_similar_task = Task(
 query_knowledge_task = Task(
     description="Extract relevant knowledge about the identified concepts",
     agent=knowledge_agent,
-    expected_output="Structured information about the concepts from the knowledge graph"
+    expected_output="Structured information about the concepts from the knowledge base"
 )
 
 generate_summary_task = Task(
@@ -186,7 +244,7 @@ generate_summary_task = Task(
 insight_crew = Crew(
     agents=[vision_agent, vector_search_agent, knowledge_agent, summary_agent],
     tasks=[process_image_task, find_similar_task, query_knowledge_task, generate_summary_task],
-    verbose=2,
+    verbose=True,
     process=Process.sequential
 )
 
@@ -196,48 +254,15 @@ class VisionKnowledgeExplorer:
     def __init__(self):
         self.vision_module = VisionModule()
         self.vector_db = VectorDB()
-        self.knowledge_graph = KnowledgeGraph()
-        # Initialize with some sample data
-        self._initialize_sample_data()
-    
-    def _initialize_sample_data(self):
-        """Initialize knowledge graph with some sample data for testing"""
-        # Add sample concepts to knowledge graph
-        concepts = {
-            "car": {"type": "vehicle", "powered_by": "engine"},
-            "Tesla": {"type": "electric vehicle", "manufacturer": "Tesla, Inc.", "founder": "Elon Musk"},
-            "smartphone": {"type": "electronic device", "purpose": "communication"},
-            "laptop": {"type": "electronic device", "purpose": "computing"},
-            "tree": {"type": "plant", "category": "nature"},
-            "dog": {"type": "animal", "category": "pet"}
-        }
-        
-        for concept, props in concepts.items():
-            self.knowledge_graph.add_concept(concept, props)
-            
-        # Add relationships (in a real scenario, this would be more complex)
-        relationships = [
-            ("Tesla", "IS_A", "car"),
-            ("Tesla", "USES", "electricity"),
-            ("smartphone", "HAS_COMPONENT", "camera"),
-            ("laptop", "HAS_COMPONENT", "keyboard")
-        ]
-        
-        with self.knowledge_graph.driver.session() as session:
-            for source, rel, target in relationships:
-                session.run(
-                    f"""
-                    MATCH (a:Concept {{name: $source}}), (b:Concept {{name: $target}})
-                    MERGE (a)-[:{rel}]->(b)
-                    """,
-                    source=source, target=target
-                )
+        self.knowledge_base = SimpleKnowledgeBase()
     
     def analyze_image(self, image_path):
         """Main function to analyze an image and provide insights"""
+        logger.info("Starting image analysis...")
+        
         # 1. Process the image with Vision Transformer
         vision_results = self.vision_module.process_image(image_path)
-        print(f"Detected: {vision_results['label']} with confidence {vision_results['confidence']:.2f}")
+        logger.info(f"Detected: {vision_results['label']} with confidence {vision_results['confidence']:.2f}")
         
         # 2. Store in vector database for future similarity search
         image_id = f"img_{hash(image_path)}"
@@ -247,17 +272,16 @@ class VisionKnowledgeExplorer:
             metadata={"label": vision_results['label'], "source": image_path}
         )
         
-        # 3. Query knowledge graph for context about detected object
-        knowledge_results = self.knowledge_graph.query_knowledge(vision_results['label'])
+        # 3. Query knowledge base for context about detected object
+        knowledge_results = self.knowledge_base.query_knowledge(vision_results['label'])
         if not knowledge_results:
             # If exact match not found, try to find closest concept
-            # (In a real implementation, this would use word embeddings or taxonomies)
             similar_concepts = [
                 concept for concept in ["car", "Tesla", "smartphone", "laptop", "tree", "dog"]
                 if concept.lower() in vision_results['label'].lower()
             ]
             if similar_concepts:
-                knowledge_results = self.knowledge_graph.query_knowledge(similar_concepts[0])
+                knowledge_results = self.knowledge_base.query_knowledge(similar_concepts[0])
         
         # 4. Find similar images previously processed
         similar_images = self.vector_db.find_similar(vision_results['image_embedding'])
@@ -268,11 +292,6 @@ class VisionKnowledgeExplorer:
             "knowledge_context": knowledge_results,
             "similar_images": similar_images
         }
-    
-    def close(self):
-        """Clean up resources"""
-        self.knowledge_graph.close()
-
 
 # ---- Example usage ----
 
@@ -311,9 +330,8 @@ def main():
         else:
             print("No similar images found")
     
-    finally:
-        # Clean up resources
-        explorer.close()
+    except Exception as e:
+        logger.error(f"An error occurred during image analysis: {e}")
 
 
 if __name__ == "__main__":
