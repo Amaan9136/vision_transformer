@@ -17,6 +17,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize search functionality
     initializeSearch();
     
+    // Initialize number inputs
+    initializeNumberInputs();
+    
+    // Initialize settings toggles
+    initializeSettingsToggles();
+    
     // Initialize "Find More Similar" functionality
     initializeMoreSimilarImages();
     
@@ -26,6 +32,87 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize web scraping button
     initializeWebScrapingButton();
 });
+
+// Initialize number inputs
+function initializeNumberInputs() {
+    const numberInputs = document.querySelectorAll('.number-input');
+    
+    numberInputs.forEach(container => {
+        const input = container.querySelector('input[type="number"]');
+        const incrementBtn = container.querySelector('.increment');
+        const decrementBtn = container.querySelector('.decrement');
+        
+        if (input && incrementBtn && decrementBtn) {
+            incrementBtn.addEventListener('click', () => {
+                const currentValue = parseInt(input.value, 10);
+                const max = parseInt(input.getAttribute('max'), 10);
+                
+                if (currentValue < max) {
+                    input.value = currentValue + 1;
+                    input.dispatchEvent(new Event('change'));
+                }
+            });
+            
+            decrementBtn.addEventListener('click', () => {
+                const currentValue = parseInt(input.value, 10);
+                const min = parseInt(input.getAttribute('min'), 10);
+                
+                if (currentValue > min) {
+                    input.value = currentValue - 1;
+                    input.dispatchEvent(new Event('change'));
+                }
+            });
+            
+            // Prevent non-numeric input
+            input.addEventListener('input', () => {
+                let value = parseInt(input.value, 10);
+                const min = parseInt(input.getAttribute('min'), 10);
+                const max = parseInt(input.getAttribute('max'), 10);
+                
+                if (isNaN(value)) {
+                    input.value = min;
+                } else {
+                    value = Math.min(Math.max(value, min), max);
+                    input.value = value;
+                }
+            });
+        }
+    });
+    
+    // Special handling for results page number input
+    const resultsNumberInput = document.getElementById('num-images-results');
+    if (resultsNumberInput) {
+        resultsNumberInput.addEventListener('change', () => {
+            // Get the current label
+            const detectedLabel = document.getElementById('detected-label');
+            if (detectedLabel && detectedLabel.textContent) {
+                // Fetch more similar images with the new count
+                fetchMoreSimilarImages(detectedLabel.textContent, parseInt(resultsNumberInput.value, 10));
+            }
+        });
+    }
+}
+
+// Initialize settings toggles
+function initializeSettingsToggles() {
+    const uploadToggle = document.getElementById('upload-settings-toggle');
+    const uploadSettings = document.getElementById('upload-advanced-settings');
+    
+    if (uploadToggle && uploadSettings) {
+        uploadToggle.addEventListener('click', () => {
+            uploadSettings.classList.toggle('hidden');
+        });
+    }
+    
+    const urlToggle = document.getElementById('url-settings-toggle');
+    const urlSettings = document.getElementById('url-advanced-settings');
+    
+    if (urlToggle && urlSettings) {
+        urlToggle.addEventListener('click', () => {
+            urlSettings.classList.toggle('hidden');
+        });
+    }
+}
 
 // Initialize search functionality
 function initializeSearch() {
@@ -70,12 +157,19 @@ function performSearch() {
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ term: searchTerm })
+        body: JSON.stringify({ 
+            term: searchTerm,
+            numWebResults: 5 // Default number of web results to fetch
+        })
     })
     .then(response => response.json())
     .then(data => {
         hideLoading();
-        displaySearchResults(data);
+        if (data.success) {
+            displaySearchResults(data);
+        } else {
+            showError(data.error || 'Search failed. Please try again.');
+        }
     })
     .catch(error => {
         console.error('Error searching:', error);
@@ -99,7 +193,7 @@ function displaySearchResults(data) {
         // Clear previous results
         searchContainer.innerHTML = '';
         
-        if (data.success && data.results && data.results.length > 0) {
+        if (data.results && data.results.length > 0) {
             // Hide no results message
             noResults.classList.add('hidden');
             
@@ -110,6 +204,15 @@ function displaySearchResults(data) {
                 const card = document.createElement('div');
                 card.className = 'image-card glass-panel p-4 rounded-lg overflow-hidden relative';
                 card.style.animationDelay = `${delay}s`;
+                
+                // Add origin badge
+                const originClass = result.origin === 'database' ? 'origin-database' : 'origin-web';
+                const originText = result.origin === 'database' ? 'DB' : 'Web';
+                
+                const badge = document.createElement('div');
+                badge.className = `image-origin-badge ${originClass}`;
+                badge.textContent = originText;
+                card.appendChild(badge);
                 
                 const img = document.createElement('img');
                 img.src = result.source;
@@ -263,32 +366,31 @@ function animateParticle(particle) {
 
 // Initialize image scraper functionality
 function initializeImageScraper() {
-    // Create a "Scan Page" button
-    const scanPageBtn = document.createElement('button');
-    scanPageBtn.id = 'scan-page-btn';
-    scanPageBtn.className = 'btn-primary px-6 py-2 rounded-full mb-4';
-    scanPageBtn.innerHTML = '<i class="fas fa-spider mr-2"></i> Scan Page for Images';
-    
-    // Add the button to URL tab, just before the existing content
-    const urlTab = document.getElementById('url-tab');
-    if (urlTab) {
-        urlTab.insertBefore(scanPageBtn, urlTab.firstChild);
-        
-        // Add click event handler
-        scanPageBtn.addEventListener('click', () => {
-            scrapeImagesFromPage();
-        });
-    }
-    
     // Add URL input functionality
     const urlBtn = document.getElementById('url-btn');
     const urlInput = document.getElementById('url-input');
+    const urlError = document.getElementById('url-error');
     
     if (urlBtn && urlInput) {
         urlBtn.addEventListener('click', () => {
             const imageUrl = urlInput.value.trim();
             if (imageUrl) {
-                analyzeImageUrl(imageUrl);
+                urlError.classList.add('hidden');
+                
+                // Get the number of images to find
+                const numImagesInput = document.getElementById('num-images-url');
+                const numImages = numImagesInput ? parseInt(numImagesInput.value, 10) : 5;
+                
+                // Get selected model
+                const modelSelect = document.getElementById('url-insight-model');
+                const model = modelSelect ? modelSelect.value : 'mistral:latest';
+                
+                // Get safe search setting
+                const safeSearch = document.querySelector('input[name="url-safe-search"]:checked').value === 'on';
+                
+                analyzeImageUrl(imageUrl, numImages, model, safeSearch);
+            } else {
+                urlError.classList.remove('hidden');
             }
         });
         
@@ -297,271 +399,268 @@ function initializeImageScraper() {
             if (e.key === 'Enter') {
                 const imageUrl = urlInput.value.trim();
                 if (imageUrl) {
-                    analyzeImageUrl(imageUrl);
+                    urlError.classList.add('hidden');
+                    
+                    // Get the number of images to find
+                    const numImagesInput = document.getElementById('num-images-url');
+                    const numImages = numImagesInput ? parseInt(numImagesInput.value, 10) : 5;
+                    
+                    // Get selected model
+                    const modelSelect = document.getElementById('url-insight-model');
+                    const model = modelSelect ? modelSelect.value : 'mistral:latest';
+                    
+                    // Get safe search setting
+                    const safeSearch = document.querySelector('input[name="url-safe-search"]:checked').value === 'on';
+                    
+                    analyzeImageUrl(imageUrl, numImages, model, safeSearch);
+                } else {
+                    urlError.classList.remove('hidden');
                 }
             }
         });
     }
 }
 
-// Scrape images from the current page
-function scrapeImagesFromPage() {
-    showLoading('Scanning page for images...');
+// Initialize drag and drop functionality
+function initializeDragAndDrop() {
+    const dropArea = document.querySelector('.drop-area');
+    const fileInput = document.getElementById('file-input');
+    const browseBtn = document.getElementById('browse-btn');
     
-    // In a real implementation, this would scan the DOM for images
-    // For our demo, we'll simulate with a delay and placeholder results
-    setTimeout(() => {
-        // Create a placeholder for image selections
-        const scrapedImagesContainer = document.createElement('div');
-        scrapedImagesContainer.id = 'scraped-images';
-        scrapedImagesContainer.className = 'mt-6 border-t pt-6';
-        
-        const heading = document.createElement('h3');
-        heading.textContent = 'Images found on this page';
-        heading.className = 'text-lg font-semibold mb-4';
-        
-        const imagesGrid = document.createElement('div');
-        imagesGrid.className = 'grid grid-cols-3 gap-4';
-        
-        // Add placeholder images (in a real app, these would be actual scraped images)
-        const imageSources = [
-            '/static/uploads/scraped_image_1.jpg',
-            '/static/uploads/scraped_image_2.jpg',
-            '/static/uploads/scraped_image_3.jpg',
-            '/static/uploads/scraped_image_4.jpg',
-            '/static/uploads/scraped_image_5.jpg',
-            '/static/uploads/scraped_image_6.jpg'
-        ];
-        
-        imageSources.forEach(src => {
-            const imageWrapper = document.createElement('div');
-            imageWrapper.className = 'relative border border-gray-200 rounded-lg overflow-hidden cursor-pointer';
-            
-            const img = document.createElement('img');
-            img.src = src;
-            img.className = 'w-full h-32 object-cover image-zoom';
-            
-            // Add click event to analyze this image
-            imageWrapper.addEventListener('click', () => {
-                analyzeImageUrl(src);
-            });
-            
-            imageWrapper.appendChild(img);
-            imagesGrid.appendChild(imageWrapper);
+    if (dropArea && fileInput && browseBtn) {
+        // Prevent default behaviors for drag events
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
         });
         
-        scrapedImagesContainer.appendChild(heading);
-        scrapedImagesContainer.appendChild(imagesGrid);
-        
-        // Add to the URL tab
-        const urlTab = document.getElementById('url-tab');
-        
-        // Remove any existing scraped images container
-        const existingContainer = document.getElementById('scraped-images');
-        if (existingContainer) {
-            existingContainer.remove();
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
         }
         
-        urlTab.appendChild(scrapedImagesContainer);
+        // Highlight drop area when file is dragged over
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.add('active');
+            });
+        });
         
-        hideLoading();
-    }, 2000);
+        // Remove highlight when file is dragged out or dropped
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.remove('active');
+            });
+        });
+        
+        // Handle file drop
+        dropArea.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                // Get the number of images to find
+                const numImagesInput = document.getElementById('num-images-upload');
+                const numImages = numImagesInput ? parseInt(numImagesInput.value, 10) : 5;
+                
+                // Get selected model
+                const modelSelect = document.getElementById('insight-model');
+                const model = modelSelect ? modelSelect.value : 'mistral:latest';
+                
+                // Get safe search setting
+                const safeSearch = document.querySelector('input[name="safe-search"]:checked').value === 'on';
+                
+                handleImageFile(files[0], numImages, model, safeSearch);
+            }
+        });
+        
+        // Handle browse files click
+        browseBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                // Get the number of images to find
+                const numImagesInput = document.getElementById('num-images-upload');
+                const numImages = numImagesInput ? parseInt(numImagesInput.value, 10) : 5;
+                
+                // Get selected model
+                const modelSelect = document.getElementById('insight-model');
+                const model = modelSelect ? modelSelect.value : 'mistral:latest';
+                
+                // Get safe search setting
+                const safeSearch = document.querySelector('input[name="safe-search"]:checked').value === 'on';
+                
+                handleImageFile(e.target.files[0], numImages, model, safeSearch);
+            }
+        });
+    }
 }
 
-// Analyze an image URL
-function analyzeImageUrl(url) {
-    showLoading('Analyzing image...');
+// Initialize tab switching
+function initializeTabs() {
+    const tabs = document.querySelectorAll('.tab');
+    const tabPanes = document.querySelectorAll('.tab-pane');
     
-    // Create form data
-    const formData = new FormData();
-    formData.append('imageUrl', url);
-    
-    // Send URL to server for analysis
-    fetch('/analyze', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        hideLoading();
-        displayResults(data);
-    })
-    .catch(error => {
-        console.error('Error analyzing image URL:', error);
-        hideLoading();
-        showError('Failed to analyze image URL. Please try again.');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Remove active class from all tabs
+            tabs.forEach(t => t.classList.remove('active'));
+            
+            // Add active class to clicked tab
+            tab.classList.add('active');
+            
+            // Hide all tab panes
+            tabPanes.forEach(pane => {
+                pane.classList.add('hidden');
+            });
+            
+            // Show the corresponding tab pane
+            const tabId = tab.getAttribute('data-tab');
+            document.getElementById(`${tabId}-tab`).classList.remove('hidden');
+        });
     });
 }
 
-// Display analysis results
-function displayResults(data) {
-    if (!data.success) {
-        showError(data.error || 'Failed to analyze image.');
+// Initialize More Similar Images functionality
+function initializeMoreSimilarImages() {
+    const scrapeMoreBtn = document.getElementById('scrape-more-images');
+    
+    if (scrapeMoreBtn) {
+        scrapeMoreBtn.addEventListener('click', () => {
+            // Get the detected label
+            const detectedLabel = document.getElementById('detected-label');
+            
+            if (detectedLabel && detectedLabel.textContent) {
+                // Get the number of images to fetch
+                const numImagesInput = document.getElementById('num-images-results');
+                const numImages = numImagesInput ? parseInt(numImagesInput.value, 10) : 5;
+                
+                fetchMoreSimilarImages(detectedLabel.textContent, numImages);
+            }
+        });
+    }
+}
+
+// Fetch more similar images
+function fetchMoreSimilarImages(label, limit = 5) {
+    if (!label) {
+        showNotification('No object detected to find similar images for', 'error');
         return;
     }
     
-    // Get DOM elements
-    const resultsSection = document.getElementById('results');
-    const searchResults = document.getElementById('search-results');
-    const originalImage = document.getElementById('original-image');
-    const detectedLabel = document.getElementById('detected-label');
-    const confidenceScore = document.getElementById('confidence-score');
-    const conceptType = document.getElementById('concept-type');
-    const conceptDescription = document.getElementById('concept-description');
-    const relatedConcepts = document.getElementById('related-concepts');
-    const knowledgeContent = document.getElementById('knowledge-content');
-    const noKnowledge = document.getElementById('no-knowledge');
+    // Show loading indicator for similar images section
+    const similarLoading = document.getElementById('similar-loading');
     const similarContainer = document.getElementById('similar-container');
     const noSimilar = document.getElementById('no-similar');
     
-    // Hide search results and show analysis results
-    if (searchResults) searchResults.classList.add('hidden');
-    if (resultsSection) resultsSection.classList.remove('hidden');
-    
-    // Update original image section
-    if (originalImage) originalImage.src = data.image.source;
-    if (detectedLabel) detectedLabel.textContent = data.image.label;
-    if (confidenceScore) confidenceScore.textContent = `${data.image.confidence}%`;
-    
-    // Update knowledge section
-    if (conceptType && conceptDescription && relatedConcepts && knowledgeContent && noKnowledge) {
-        if (data.knowledge && Object.keys(data.knowledge).length > 0) {
-            knowledgeContent.classList.remove('hidden');
-            noKnowledge.classList.add('hidden');
-            
-            conceptType.textContent = data.knowledge.type || 'Unknown';
-            conceptDescription.textContent = data.knowledge.description || 'No description available.';
-            
-            // Update related concepts
-            relatedConcepts.innerHTML = '';
-            
-            if (data.knowledge.relations && data.knowledge.relations.length > 0) {
-                data.knowledge.relations.forEach((relation, index) => {
-                    // Add animation delay
-                    const delay = index * 0.1;
-                    
-                    const badge = document.createElement('div');
-                    badge.className = 'bg-indigo-100 text-indigo-800 rounded-full px-3 py-1 text-sm flex items-center knowledge-item';
-                    badge.style.animationDelay = `${delay}s`;
-                    
-                    const icon = document.createElement('i');
-                    icon.className = 'fas fa-link mr-2 text-indigo-600 text-xs';
-                    
-                    const text = document.createElement('span');
-                    text.textContent = `${relation.relationship}: ${relation.related_concept}`;
-                    
-                    badge.appendChild(icon);
-                    badge.appendChild(text);
-                    relatedConcepts.appendChild(badge);
-                });
-            } else {
-                const noConcepts = document.createElement('p');
-                noConcepts.className = 'text-gray-500';
-                noConcepts.textContent = 'No related concepts found.';
-                relatedConcepts.appendChild(noConcepts);
-            }
-        } else {
-            knowledgeContent.classList.add('hidden');
-            noKnowledge.classList.remove('hidden');
-        }
-    }
-    
-    // Update similar images section
-    if (similarContainer && noSimilar) {
+    if (similarLoading && similarContainer) {
+        similarLoading.classList.remove('hidden');
         similarContainer.innerHTML = '';
+        if (noSimilar) noSimilar.classList.add('hidden');
+    }
+    
+    // Make the API request
+    fetch('/scrape-similar', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            label: label,
+            limit: limit
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (similarLoading) similarLoading.classList.add('hidden');
         
-        if (data.similar_images && data.similar_images.length > 0) {
-            noSimilar.classList.add('hidden');
-            
-            data.similar_images.forEach((image, index) => {
-                // Add animation delay
-                const delay = index * 0.1;
-                
-                const card = document.createElement('div');
-                card.className = 'image-card glass-panel p-4 rounded-lg overflow-hidden relative';
-                card.style.animationDelay = `${delay}s`;
-                
-                const img = document.createElement('img');
-                img.src = image.source;
-                img.alt = image.label;
-                img.className = 'w-full h-40 object-cover rounded-lg mb-3 image-zoom';
-                
-                const badge = document.createElement('div');
-                badge.className = 'similarity-badge';
-                badge.textContent = `${image.similarity}%`;
-                
-                const label = document.createElement('p');
-                label.className = 'text-gray-800 font-medium truncate';
-                label.textContent = image.label;
-                
-                card.appendChild(img);
-                card.appendChild(badge);
-                card.appendChild(label);
-                
-                // Add click event to analyze this image
-                card.addEventListener('click', () => {
-                    analyzeImageUrl(image.source);
-                });
-                
-                similarContainer.appendChild(card);
-            });
+        if (data.success && data.images && data.images.length > 0) {
+            // Update similar images section
+            displaySimilarImages(data.images);
         } else {
-            noSimilar.classList.remove('hidden');
+            showNotification('No additional similar images found', 'info');
+            if (noSimilar && similarContainer.children.length === 0) {
+                noSimilar.classList.remove('hidden');
+            }
         }
-    }
-    
-    // Scroll to results
-    if (resultsSection) {
-        resultsSection.scrollIntoView({ behavior: 'smooth' });
-    }
+    })
+    .catch(error => {
+        console.error('Error fetching more similar images:', error);
+        if (similarLoading) similarLoading.classList.add('hidden');
+        showError('Failed to fetch additional similar images');
+    });
 }
 
-// Show loading overlay
-function showLoading(message = 'Loading...') {
-    const loadingOverlay = document.getElementById('loading-overlay');
+// Display similar images
+function displaySimilarImages(images) {
+    const similarContainer = document.getElementById('similar-container');
+    const noSimilar = document.getElementById('no-similar');
     
-    if (loadingOverlay) {
-        // Update loading message if provided
-        const loadingMessage = loadingOverlay.querySelector('p');
-        if (loadingMessage) {
-            loadingMessage.textContent = message;
+    if (!similarContainer) return;
+    
+    // Hide no results message
+    if (noSimilar) noSimilar.classList.add('hidden');
+    
+    // Clear existing images
+    similarContainer.innerHTML = '';
+    
+    // Add each image to the container with animation delay
+    images.forEach((image, index) => {
+        const delay = index * 0.1;
+        
+        const card = document.createElement('div');
+        card.className = 'image-card glass-panel p-4 rounded-lg overflow-hidden relative';
+        card.style.animationDelay = `${delay}s`;
+        
+        // Add origin badge if available
+        if (image.origin) {
+            const originClass = image.origin === 'database' ? 'origin-database' : 'origin-web';
+            const originText = image.origin === 'database' ? 'DB' : 'Web';
+            
+            const originBadge = document.createElement('div');
+            originBadge.className = `image-origin-badge ${originClass}`;
+            originBadge.textContent = originText;
+            card.appendChild(originBadge);
         }
         
-        loadingOverlay.classList.remove('hidden');
-    }
-}
-
-// Hide loading overlay
-function hideLoading() {
-    const loadingOverlay = document.getElementById('loading-overlay');
-    
-    if (loadingOverlay) {
-        loadingOverlay.classList.add('hidden');
-    }
-}
-
-// Show error message
-function showError(message) {
-    // Create a toast-like error message
-    const errorToast = document.createElement('div');
-    errorToast.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
-    errorToast.textContent = message;
-    
-    document.body.appendChild(errorToast);
-    
-    // Remove after 5 seconds
-    setTimeout(() => {
-        errorToast.classList.add('opacity-0');
-        errorToast.style.transition = 'opacity 0.5s ease';
+        // Add similarity badge if available
+        if (image.similarity !== undefined) {
+            const badge = document.createElement('div');
+            badge.className = 'similarity-badge';
+            badge.textContent = `${image.similarity}%`;
+            card.appendChild(badge);
+        }
         
-        // Remove from DOM after fade out
-        setTimeout(() => {
-            document.body.removeChild(errorToast);
-        }, 500);
-    }, 5000);
+        const img = document.createElement('img');
+        img.src = image.source;
+        img.alt = image.label;
+        img.className = 'w-full h-40 object-cover rounded-lg mb-3 image-zoom';
+        
+        // Mark placeholder images visually
+        if (image.is_placeholder) {
+            img.classList.add('opacity-70');
+        }
+        
+        const label = document.createElement('p');
+        label.className = 'text-gray-800 font-medium truncate';
+        label.textContent = image.label;
+        
+        card.appendChild(img);
+        card.appendChild(label);
+        
+        // Add click event to analyze this image (unless it's a placeholder)
+        if (!image.is_placeholder) {
+            card.addEventListener('click', () => {
+                analyzeImageUrl(image.source);
+            });
+        }
+        
+        similarContainer.appendChild(card);
+    });
 }
 
-// Function to handle pasted content (for base64 images)
+// Initialize paste handling for base64 images
 function initializePasteHandling() {
     const urlInput = document.getElementById('url-input');
     
@@ -603,19 +702,62 @@ function initializePasteHandling() {
     }
 }
 
-// Enhanced image URL analyzer with better error handling
-function analyzeImageUrl(url) {
+// Handle image file upload
+function handleImageFile(file, numImages = 5, model = 'mistral:latest', safeSearch = true) {
+    // Show loading state
+    showLoading('Analyzing image...');
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('imageFile', file);
+    formData.append('numImages', numImages);
+    formData.append('model', model);
+    formData.append('safeSearch', safeSearch);
+    
+    // Send file to server for analysis
+    fetch('/analyze', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Failed to analyze image');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            displayResults(data, model);
+        } else {
+            showError(data.error || 'Unknown error occurred while analyzing image');
+        }
+    })
+    .catch(error => {
+        console.error('Error analyzing image:', error);
+        hideLoading();
+        showError(error.message || 'Failed to analyze image. Please try again.');
+    });
+}
+
+// Enhanced image URL analyzer
+function analyzeImageUrl(url, numImages = 5, model = 'mistral:latest', safeSearch = true) {
     // Check if URL is empty
     if (!url || url.trim() === '') {
         showNotification('Please enter a valid image URL', 'error');
         return;
     }
     
-    showLoading('Analyzing image...');
+    showLoading('Analyzing image URL...');
     
     // Create form data
     const formData = new FormData();
     formData.append('imageUrl', url);
+    formData.append('numImages', numImages);
+    formData.append('model', model);
+    formData.append('safeSearch', safeSearch);
     
     // Send URL to server for analysis
     fetch('/analyze', {
@@ -633,7 +775,7 @@ function analyzeImageUrl(url) {
     .then(data => {
         hideLoading();
         if (data.success) {
-            displayResults(data);
+            displayResults(data, model);
         } else {
             showError(data.error || 'Unknown error occurred while analyzing image');
         }
@@ -645,6 +787,205 @@ function analyzeImageUrl(url) {
     });
 }
 
+// Display analysis results
+function displayResults(data, model = 'mistral:latest') {
+    const resultsSection = document.getElementById('results');
+    const searchResults = document.getElementById('search-results');
+    const originalImage = document.getElementById('original-image');
+    const detectedLabel = document.getElementById('detected-label');
+    const confidenceScore = document.getElementById('confidence-score');
+    const conceptType = document.getElementById('concept-type');
+    const conceptDescription = document.getElementById('concept-description');
+    const conceptFacts = document.getElementById('concept-facts');
+    const relatedConcepts = document.getElementById('related-concepts');
+    const knowledgeContent = document.getElementById('knowledge-content');
+    const noKnowledge = document.getElementById('no-knowledge');
+    const loadingInsights = document.getElementById('loading-insights');
+    const modelUsed = document.getElementById('model-used');
+    const numImagesResults = document.getElementById('num-images-results');
+    
+    // Hide search results and show analysis results
+    if (searchResults) searchResults.classList.add('hidden');
+    if (resultsSection) resultsSection.classList.remove('hidden');
+    
+    // Update original image section
+    if (originalImage) originalImage.src = data.image.source;
+    if (detectedLabel) detectedLabel.textContent = data.image.label;
+    if (confidenceScore) confidenceScore.textContent = `${data.image.confidence}%`;
+    
+    // Update the number of similar images input
+    if (numImagesResults) {
+        numImagesResults.value = data.similar_images.length;
+    }
+    
+    // Set model used
+    if (modelUsed) {
+        const modelName = model.split(':')[0].charAt(0).toUpperCase() + model.split(':')[0].slice(1);
+        modelUsed.textContent = modelName;
+    }
+    
+    // Update knowledge section
+    if (conceptType && conceptDescription && conceptFacts && relatedConcepts && knowledgeContent && noKnowledge && loadingInsights) {
+        // Hide loading and show content
+        loadingInsights.classList.add('hidden');
+        
+        if (data.knowledge && Object.keys(data.knowledge).length > 0) {
+            knowledgeContent.classList.remove('hidden');
+            noKnowledge.classList.add('hidden');
+            
+            // Update type and description
+            conceptType.textContent = data.knowledge.type || 'Unknown';
+            conceptDescription.textContent = data.knowledge.description || 'No description available.';
+            
+            // Update facts
+            conceptFacts.innerHTML = '';
+            if (data.knowledge.facts && data.knowledge.facts.length > 0) {
+                data.knowledge.facts.forEach(fact => {
+                    const li = document.createElement('li');
+                    li.textContent = fact;
+                    conceptFacts.appendChild(li);
+                });
+            } else {
+                const noFacts = document.createElement('li');
+                noFacts.className = 'text-gray-500';
+                noFacts.textContent = 'No facts available.';
+                conceptFacts.appendChild(noFacts);
+            }
+            
+            // Update related concepts
+            relatedConcepts.innerHTML = '';
+            
+            if (data.knowledge.relations && data.knowledge.relations.length > 0) {
+                data.knowledge.relations.forEach((relation, index) => {
+                    // Add animation delay
+                    const delay = index * 0.1;
+                    
+                    const badge = document.createElement('div');
+                    badge.className = 'bg-indigo-100 text-indigo-800 rounded-full px-3 py-1 text-sm flex items-center knowledge-item';
+                    badge.style.animationDelay = `${delay}s`;
+                    
+                    const icon = document.createElement('i');
+                    icon.className = 'fas fa-link mr-2 text-indigo-600 text-xs';
+                    
+                    const text = document.createElement('span');
+                    text.textContent = `${relation.relationship}: ${relation.related_concept}`;
+                    
+                    badge.appendChild(icon);
+                    badge.appendChild(text);
+                    relatedConcepts.appendChild(badge);
+                });
+            } else {
+                const noConcepts = document.createElement('p');
+                noConcepts.className = 'text-gray-500';
+                noConcepts.textContent = 'No related concepts found.';
+                relatedConcepts.appendChild(noConcepts);
+            }
+        } else {
+            knowledgeContent.classList.add('hidden');
+            noKnowledge.classList.remove('hidden');
+        }
+    }
+    
+    // Display similar images
+    displaySimilarImages(data.similar_images);
+    
+    // Scroll to results
+    if (resultsSection) {
+        resultsSection.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+// Initialize web scraping button
+function initializeWebScrapingButton() {
+    const scanPageBtn = document.getElementById('scan-page-btn');
+    
+    if (scanPageBtn) {
+        scanPageBtn.addEventListener('click', () => {
+            // Get the search input value
+            const searchInput = document.getElementById('search-input');
+            const searchTerm = searchInput ? searchInput.value.trim() : '';
+            
+            if (searchTerm) {
+                showLoading('Searching web for images...');
+                
+                fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        term: searchTerm,
+                        numWebResults: 10 // More web results for this specific search
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        displaySearchResults(data);
+                    } else {
+                        showError(data.error || 'Web search failed. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error in web search:', error);
+                    hideLoading();
+                    showError('Web search failed. Please try again.');
+                });
+            } else {
+                showNotification('Please enter a search term first', 'error');
+            }
+        });
+    }
+}
+
+// Show loading overlay
+function showLoading(message = 'Loading...') {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    
+    if (loadingOverlay) {
+        // Update loading message if provided
+        const loadingMessage = loadingOverlay.querySelector('#loading-message');
+        if (loadingMessage) {
+            loadingMessage.textContent = message;
+        }
+        
+        loadingOverlay.classList.remove('hidden');
+    }
+}
+
+// Hide loading overlay
+function hideLoading() {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+    }
+}
+
+// Show error message
+function showError(message) {
+    // Create a toast-like error message
+    const errorToast = document.createElement('div');
+    errorToast.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+    errorToast.textContent = message;
+    
+    document.body.appendChild(errorToast);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+        errorToast.classList.add('opacity-0');
+        errorToast.style.transition = 'opacity 0.5s ease';
+        
+        // Remove from DOM after fade out
+        setTimeout(() => {
+            if (document.body.contains(errorToast)) {
+                document.body.removeChild(errorToast);
+            }
+        }, 500);
+    }, 5000);
+}
+
 // Show a notification toast
 function showNotification(message, type = 'info') {
     const toast = document.createElement('div');
@@ -653,6 +994,7 @@ function showNotification(message, type = 'info') {
     let bgColor = 'bg-indigo-500';
     if (type === 'error') bgColor = 'bg-red-500';
     else if (type === 'success') bgColor = 'bg-green-500';
+    else if (type === 'warning') bgColor = 'bg-yellow-500';
     
     toast.className = `fixed bottom-4 left-1/2 transform -translate-x-1/2 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
     toast.textContent = message;
@@ -671,109 +1013,4 @@ function showNotification(message, type = 'info') {
             }
         }, 500);
     }, 4000);
-}
-
-// Initialize tab switching functionality
-function initializeTabs() {
-    const tabs = document.querySelectorAll('.tab');
-    const tabPanes = document.querySelectorAll('.tab-pane');
-    
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            // Remove active class from all tabs
-            tabs.forEach(t => t.classList.remove('active'));
-            
-            // Add active class to clicked tab
-            tab.classList.add('active');
-            
-            // Hide all tab panes
-            tabPanes.forEach(pane => {
-                pane.classList.add('hidden');
-            });
-            
-            // Show the corresponding tab pane
-            const tabId = tab.getAttribute('data-tab');
-            document.getElementById(`${tabId}-tab`).classList.remove('hidden');
-        });
-    });
-}
-
-// Initialize drag and drop functionality
-function initializeDragAndDrop() {
-    const dropArea = document.querySelector('.drop-area');
-    const fileInput = document.getElementById('file-input');
-    const browseBtn = document.getElementById('browse-btn');
-    
-    if (dropArea && fileInput && browseBtn) {
-        // Prevent default behaviors for drag events
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, preventDefaults, false);
-        });
-        
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-        
-        // Highlight drop area when file is dragged over
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => {
-                dropArea.classList.add('active');
-            });
-        });
-        
-        // Remove highlight when file is dragged out or dropped
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => {
-                dropArea.classList.remove('active');
-            });
-        });
-        
-        // Handle file drop
-        dropArea.addEventListener('drop', (e) => {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            
-            if (files.length > 0 && files[0].type.startsWith('image/')) {
-                handleImageFile(files[0]);
-            }
-        });
-        
-        // Handle browse files click
-        browseBtn.addEventListener('click', () => {
-            fileInput.click();
-        });
-        
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleImageFile(e.target.files[0]);
-            }
-        });
-        
-        // Handle image file upload
-        function handleImageFile(file) {
-            // Show loading state
-            showLoading('Analyzing image...');
-            
-            // Create form data
-            const formData = new FormData();
-            formData.append('imageFile', file);
-            
-            // Send file to server for analysis
-            fetch('/analyze', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                hideLoading();
-                displayResults(data);
-            })
-            .catch(error => {
-                console.error('Error analyzing image:', error);
-                hideLoading();
-                showError('Failed to analyze image. Please try again.');
-            });
-        }
-    }
 }
