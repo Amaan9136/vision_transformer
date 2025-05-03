@@ -14,8 +14,15 @@ from CONSTANTS.MODULES import (
     os, logging, json, uuid, requests, base64,
     Image, datetime,
     chromadb, Flask, render_template, request, jsonify, send_file,
-    urllib, logger, string,
+    urllib, logger, string, socketio, SocketIO,
 )
+
+# Import custom modules
+from helpers_and_class.VisionModule import VisionModule
+from helpers_and_class.VectorDB import VectorDB
+from helpers_and_class.ImageScraper import ImageScraper
+from helpers_and_class.LLMInsightGenerator import LLMInsightGenerator
+from helpers_and_class.TransformerExplainerModule import TransformerExplainerModule
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -29,11 +36,21 @@ flask_app.config['FEATURE_MAPS_FOLDER'] = 'static/feature_maps'
 flask_app.config['TRANSFORMATION_FOLDER'] = 'static/transformations'
 flask_app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
 
+# Initialize SocketIO
+socketio = SocketIO(flask_app, cors_allowed_origins="*")
+
 # Ensure upload directories exist
 os.makedirs(flask_app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(flask_app.config['ATTENTION_MAPS_FOLDER'], exist_ok=True)
 os.makedirs(flask_app.config['FEATURE_MAPS_FOLDER'], exist_ok=True)
 os.makedirs(flask_app.config['TRANSFORMATION_FOLDER'], exist_ok=True)
+
+# Initialize modules
+vision_module = VisionModule()
+vector_db = VectorDB()
+image_scraper = ImageScraper()
+llm_insights = LLMInsightGenerator(model_name="mistral:latest")
+transformer_explainer = TransformerExplainerModule()
 
 def is_base64_image(data):
     """Check if a string is a base64 encoded image."""
@@ -72,6 +89,15 @@ def sanitize_filename(filename):
         sanitized = name[:100] + ext
         
     return sanitized
+
+# WebSocket endpoint for logging
+@socketio.on('connect')
+def handle_connect():
+    socketio.emit('log_message', {'message': 'Connected to server'})
+
+def log_to_client(message, level='info'):
+    """Send log message to connected clients"""
+    socketio.emit('log_message', {'message': message, 'level': level})
 
 
 # Flask routes for the Vision Transformer Explorer application
@@ -172,6 +198,8 @@ def analyze_image():
         # Get visualization setting (default is True)
         generate_visualizations = request.form.get('generateVisualizations', 'true').lower() == 'true'
         
+        log_to_client(f"Starting image analysis with model: {model}")
+        
         if 'imageUrl' in request.form:
             # Image URL provided
             image_url = request.form['imageUrl']
@@ -181,6 +209,7 @@ def analyze_image():
             
             # Check if this is a base64 encoded image
             if is_base64_image(image_url):
+                log_to_client("Processing base64 encoded image")
                 # Decode base64 data
                 image_data = decode_base64_image(image_url)
                 if not image_data:
@@ -196,12 +225,14 @@ def analyze_image():
                     f.write(image_data)
                 
                 # Process the image data directly
+                log_to_client("Analyzing image with Vision Transformer...")
                 vision_results = vision_module.process_image(image_data=image_data, generate_visualizations=generate_visualizations)
                 
                 # Use the file path as source for the record
                 source_path = f"/static/uploads/{filename}"
             else:
                 try:
+                    log_to_client(f"Processing image from URL: {image_url}")
                     # For URLs, download the image first to handle potential errors better
                     if image_url.startswith(('http', 'https')):
                         image_data = vision_module._download_image_with_retry(image_url)
@@ -221,13 +252,16 @@ def analyze_image():
                             f.write(image_data)
                         
                         # Process the image from the saved file
+                        log_to_client("Analyzing image with Vision Transformer...")
                         vision_results = vision_module.process_image(image_path=filepath, generate_visualizations=generate_visualizations)
                         source_path = f"/static/uploads/{filename}"
                     else:
                         # For local paths, process directly
+                        log_to_client("Processing image from local path")
                         vision_results = vision_module.process_image(image_path=image_url, generate_visualizations=generate_visualizations)
                         source_path = image_url
                 except requests.exceptions.RequestException as e:
+                    log_to_client(f"Error downloading image: {str(e)}", "error")
                     logger.error(f"Error downloading image from URL: {e}")
                     return jsonify({
                         "success": False,
@@ -247,11 +281,14 @@ def analyze_image():
             }
             
             # Check for duplicates before adding to database
+            log_to_client("Checking for duplicate images in database...")
             duplicate_id = vector_db.find_duplicates(vision_results['perceptual_hash'])
             if duplicate_id:
                 logger.info(f"Duplicate image detected, using existing ID: {duplicate_id}")
+                log_to_client(f"Duplicate image detected, using existing ID: {duplicate_id}")
                 image_id = duplicate_id
             else:
+                log_to_client("Saving image data to vector database...")
                 vector_db.add_image_data(image_id, vision_results['image_embedding'], metadata)
             
         elif 'imageFile' in request.files:
@@ -268,14 +305,17 @@ def analyze_image():
             
             # Save the file
             file.save(filepath)
+            log_to_client(f"File saved: {filename}")
             
             # Generate a unique ID for this image
             image_id = f"img_{uuid.uuid4()}"
             
             # Process the image
             try:
+                log_to_client("Analyzing uploaded image with Vision Transformer...")
                 vision_results = vision_module.process_image(image_path=filepath, generate_visualizations=generate_visualizations)
             except Exception as e:
+                log_to_client(f"Error processing image: {str(e)}", "error")
                 logger.error(f"Error processing uploaded image: {e}")
                 return jsonify({
                     "success": False,
@@ -283,12 +323,15 @@ def analyze_image():
                 }), 400
             
             # Check for duplicates before adding to database
+            log_to_client("Checking for duplicate images in database...")
             duplicate_id = vector_db.find_duplicates(vision_results['perceptual_hash'])
             if duplicate_id:
                 logger.info(f"Duplicate image detected, using existing ID: {duplicate_id}")
+                log_to_client(f"Duplicate image detected, using existing ID: {duplicate_id}")
                 image_id = duplicate_id
             else:
                 # Save results to vector database
+                log_to_client("Saving image data to vector database...")
                 metadata = {
                     "label": vision_results['label'],
                     "source": f"/static/uploads/{filename}",
@@ -305,15 +348,18 @@ def analyze_image():
             return jsonify({"success": False, "error": "No image provided"}), 400
         
         # Generate LLM insights with transformer-specific details
+        log_to_client("Generating LLM insights about the image...")
         insights = llm_insights.generate_insights(vision_results['label'], vision_results['confidence'])
         
         # Get transformer explanation for this image type
+        log_to_client("Generating transformer explanations...")
         transformer_explanation = transformer_explainer.generate_custom_explanation(vision_results['label'])
         
         # Get attention explanation for this image type
         attention_explanation = transformer_explainer.generate_attention_explanation(vision_results['label'])
         
         # Find similar images from the vector database
+        log_to_client("Finding similar images from vector database...")
         similar_results = vector_db.find_similar(vision_results['image_embedding'], num_similar_images)
         
         # Prepare similar images data from the vector database
@@ -345,6 +391,7 @@ def analyze_image():
         if additional_images_needed > 0:
             try:
                 # Use the label for searching similar images
+                log_to_client(f"Searching web for {additional_images_needed} similar images...")
                 web_images = image_scraper.scrape_similar_images(
                     label=vision_results['label'], 
                     limit=additional_images_needed
@@ -360,6 +407,7 @@ def analyze_image():
                     img['origin'] = 'web'
                     
                     # Save the web image locally to avoid CORS issues
+                    log_to_client(f"Downloading web image {i+1}/{len(web_images)}...")
                     local_path = image_scraper.download_image(img['source'])
                     if local_path:
                         img['source'] = local_path
@@ -368,6 +416,7 @@ def analyze_image():
                         img['source'] = f"https://via.placeholder.com/400x300.png?text={urllib.parse.quote(vision_results['label'])}"
                         img['is_placeholder'] = True
             except Exception as e:
+                log_to_client(f"Error scraping web images: {str(e)}", "error")
                 logger.error(f"Error scraping web images: {e}")
                 # Create placeholders for the missing images
                 for i in range(additional_images_needed):
@@ -387,6 +436,9 @@ def analyze_image():
         # Sort by similarity score and limit to requested number
         all_similar_images = sorted(all_similar_images, key=lambda x: x['similarity'], reverse=True)[:num_similar_images]
         
+        # Log completion
+        log_to_client("Analysis complete! Returning results...")
+        
         # Return the results
         return jsonify({
             "success": True,
@@ -405,6 +457,7 @@ def analyze_image():
             "similar_images": all_similar_images
         })
     except Exception as e:
+        log_to_client(f"Unexpected error: {str(e)}", "error")
         logger.error(f"Unexpected error in analyze_image: {str(e)}", exc_info=True)
         return jsonify({
             "success": False,
@@ -420,6 +473,8 @@ def search_similar():
         if not search_term:
             return jsonify({"success": False, "error": "No search term provided"}), 400
         
+        log_to_client(f"Searching for images with label: {search_term}")
+        
         # Use the more efficient search method from VectorDB
         results = vector_db.search_by_label(search_term)
         
@@ -431,6 +486,7 @@ def search_similar():
         web_results = []
         if num_web_results > 0:
             try:
+                log_to_client(f"Searching web for {num_web_results} additional images...")
                 web_images = image_scraper.scrape_images_by_keyword(search_term, limit=num_web_results)
                 
                 for img in web_images:
@@ -440,6 +496,7 @@ def search_similar():
                     img['timestamp'] = datetime.now().isoformat()
                     
                     # Save the web image locally to avoid CORS issues
+                    log_to_client(f"Downloading web image: {img['label']}")
                     local_path = image_scraper.download_image(img['source'])
                     if local_path:
                         img['source'] = local_path
@@ -448,6 +505,7 @@ def search_similar():
                         # Keep placeholders as they are
                         web_results.append(img)
             except Exception as e:
+                log_to_client(f"Error getting web search results: {str(e)}", "error")
                 logger.error(f"Error getting web search results: {e}")
                 # Add placeholders if web scraping fails
                 for i in range(num_web_results):
@@ -464,12 +522,15 @@ def search_similar():
         # Combine results, prioritizing database results
         all_results = results + web_results
         
+        log_to_client(f"Search complete. Found {len(all_results)} images.")
+        
         return jsonify({
             "success": True,
             "results": all_results
         })
         
     except Exception as e:
+        log_to_client(f"Error in search: {str(e)}", "error")
         logger.error(f"Error in search_similar: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -490,6 +551,7 @@ def scrape_similar_images():
             return jsonify({"success": False, "error": "Either label or imageUrl must be provided"}), 400
         
         # Scrape similar images using our image scraper
+        log_to_client(f"Scraping {limit} similar images for '{label or image_url}'")
         web_images = image_scraper.scrape_similar_images(
             image_url=image_url,
             label=label,
@@ -514,6 +576,7 @@ def scrape_similar_images():
                     continue
                 
                 # Save the web image locally to avoid CORS issues
+                log_to_client(f"Downloading web image {i+1}/{len(web_images)}...")
                 local_path = image_scraper.download_image(img['source'])
                 if local_path:
                     processed_images.append({
@@ -525,11 +588,13 @@ def scrape_similar_images():
                         "similarity": 90 - (i * 2)  # Decreasing similarity
                     })
             except Exception as e:
+                log_to_client(f"Error processing scraped image: {str(e)}", "warning")
                 logger.warning(f"Error processing scraped image: {e}")
         
         # If we couldn't process any images, add placeholders
         if not processed_images:
             keyword = label or "image"
+            log_to_client(f"No images processed successfully. Adding placeholders...")
             for i in range(limit):
                 processed_images.append({
                     "id": f"web_{uuid.uuid4()}",
@@ -541,12 +606,15 @@ def scrape_similar_images():
                     "is_placeholder": True
                 })
         
+        log_to_client(f"Scraping complete. Returning {len(processed_images)} images.")
+        
         return jsonify({
             "success": True,
             "images": processed_images
         })
         
     except Exception as e:
+        log_to_client(f"Error in scrape-similar: {str(e)}", "error")
         logger.error(f"Error in scrape_similar_images: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -584,6 +652,8 @@ def compare_models():
         image_id = request.json.get('imageId')
         if not image_id:
             return jsonify({"success": False, "error": "No image ID provided"}), 400
+        
+        log_to_client(f"Comparing models for image ID: {image_id}")
         
         # Get the image data from the vector database
         image_data = vector_db.collection.get(ids=[image_id])
@@ -646,6 +716,8 @@ def compare_models():
             }
         }
         
+        log_to_client("Model comparison complete")
+        
         return jsonify({
             "success": True,
             "image_source": image_source,
@@ -653,6 +725,7 @@ def compare_models():
         })
         
     except Exception as e:
+        log_to_client(f"Error in compare_models: {str(e)}", "error")
         logger.error(f"Error in compare_models: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -668,6 +741,8 @@ def generate_attention_visualization():
         if not image_id:
             return jsonify({"success": False, "error": "No image ID provided"}), 400
         
+        log_to_client(f"Generating attention visualization for image ID: {image_id}")
+        
         # Get the image data from the vector database
         image_data = vector_db.collection.get(ids=[image_id])
         if not image_data or not image_data['ids']:
@@ -681,6 +756,7 @@ def generate_attention_visualization():
         if not metadata.get('attention_maps'):
             # Generate attention maps
             try:
+                log_to_client("Generating attention maps...")
                 image_path = os.path.join(flask_app.root_path, image_source.lstrip('/'))
                 image = Image.open(image_path)
                 
@@ -688,13 +764,17 @@ def generate_attention_visualization():
                 attention_maps = vision_module._generate_attention_visualizations(image)
                 
                 # Update metadata with attention maps
+                log_to_client("Updating vector database with attention maps...")
                 vector_db.collection.update(
                     ids=[image_id],
                     metadatas=[{**metadata, "attention_maps": attention_maps}]
                 )
             except Exception as e:
+                log_to_client(f"Error generating attention maps: {str(e)}", "error")
                 logger.error(f"Error generating attention maps: {e}")
                 return jsonify({"success": False, "error": f"Failed to generate attention maps: {str(e)}"}), 500
+        
+        log_to_client("Attention visualization complete")
         
         # Return the attention visualization path
         return jsonify({
@@ -704,6 +784,7 @@ def generate_attention_visualization():
         })
         
     except Exception as e:
+        log_to_client(f"Error in generate_attention_visualization: {str(e)}", "error")
         logger.error(f"Error in generate_attention_visualization: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -742,6 +823,7 @@ def download_visualization(viz_type, viz_id):
             mimetype='image/png'
         )
     except Exception as e:
+        log_to_client(f"Error downloading visualization: {str(e)}", "error")
         logger.error(f"Error downloading visualization: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -750,5 +832,61 @@ def interactive_transformer():
     """Interactive Vision Transformer demo page"""
     return render_template('interactive.html')
 
+@flask_app.route('/system_logs')
+def system_logs():
+    """View system logs page"""
+    return render_template('logs.html')
+
+# Add WebSocket endpoint for terminal commands
+@socketio.on('execute_command')
+def handle_command(data):
+    """Handle terminal commands from the frontend"""
+    command = data.get('command', '').strip()
+    log_to_client(f"Executing command: {command}")
+    
+    if command.startswith('help'):
+        # Return available commands
+        socketio.emit('command_result', {
+            'result': """Available commands:
+- help: Show this help message
+- status: Show system status
+- list models: List available models
+- clear cache: Clear image cache
+- version: Show system version"""
+        })
+    elif command.startswith('status'):
+        # Return system status
+        socketio.emit('command_result', {
+            'result': f"""System Status:
+- Vector DB: {len(vector_db.hash_index)} images indexed
+- Vision Module: Active
+- Image Scraper: Active
+- LLM Insights: Using model {llm_insights.model_name}
+- Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+        })
+    elif command.startswith('list models'):
+        # List models
+        socketio.emit('command_result', {
+            'result': """Available Models:
+1. google/vit-base-patch16-224 (default)
+2. mistral:latest (for insights generation)
+3. llama2:latest (alternative for insights)"""
+        })
+    elif command.startswith('clear cache'):
+        # Simulate cache clearing
+        socketio.emit('command_result', {
+            'result': "Cache cleared successfully."
+        })
+    elif command.startswith('version'):
+        # Return version info
+        socketio.emit('command_result', {
+            'result': "Vision Knowledge Explorer v1.0.0"
+        })
+    else:
+        # Unknown command
+        socketio.emit('command_result', {
+            'result': f"Unknown command: {command}\nType 'help' to see available commands."
+        })
+
 if __name__ == "__main__":
-    flask_app.run(debug=True, port=5000, host="0.0.0.0")
+    socketio.run(flask_app, debug=True, port=5000, host="0.0.0.0")

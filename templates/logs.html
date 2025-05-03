@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Logs - Vision Knowledge Explorer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap');
+
+        .terminal {
+            font-family: 'Fira Code', monospace;
+            background-color: #1e1e1e;
+            color: #f0f0f0;
+            border-radius: 8px;
+            padding: 16px;
+            height: 400px;
+            overflow-y: auto;
+        }
+
+        .log-container {
+            height: 400px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .log-info {
+            color: #0d6efd;
+        }
+
+        .log-error {
+            color: #dc3545;
+        }
+
+        .log-warning {
+            color: #ffc107;
+        }
+
+        .terminal-input {
+            background-color: transparent;
+            border: none;
+            color: #f0f0f0;
+            font-family: 'Fira Code', monospace;
+            width: 100%;
+            outline: none;
+        }
+
+        .prompt {
+            color: #4caf50;
+        }
+
+        .command {
+            color: #f0f0f0;
+        }
+
+        .result {
+            color: #9cdcfe;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mx-auto px-4 py-8">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-10">
+            <div class="flex items-center mb-4 md:mb-0">
+                <i class="fas fa-eye text-4xl text-indigo-600 mr-4"></i>
+                <h1 class="text-3xl font-bold text-gray-800">Vision Knowledge Explorer</h1>
+            </div>
+            <a href="/" class="btn-primary px-4 py-2 rounded-lg">
+                <i class="fas fa-home mr-2"></i> Back to Home
+            </a>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div class="glass-panel p-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">System Logs</h2>
+                <div id="log-container" class="log-container">
+                    <div class="text-gray-500 italic">Connecting to log stream...</div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Terminal</h2>
+                <div id="terminal" class="terminal">
+                    <div class="mb-2">Vision Knowledge Explorer Terminal v1.0.0</div>
+                    <div class="mb-2">Type 'help' to see available commands.</div>
+                    <div id="terminal-output"></div>
+                    <div class="flex">
+                        <span class="prompt mr-2">$</span>
+                        <input type="text" id="terminal-input" class="terminal-input" autofocus
+                            placeholder="Enter command...">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel p-6 mb-8">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">System Status</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="p-4 bg-white rounded-lg shadow">
+                    <h3 class="font-bold text-gray-700 mb-2">Vision Module</h3>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                        <span>Active</span>
+                    </div>
+                </div>
+                <div class="p-4 bg-white rounded-lg shadow">
+                    <h3 class="font-bold text-gray-700 mb-2">Vector Database</h3>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                        <span>Connected</span>
+                    </div>
+                </div>
+                <div class="p-4 bg-white rounded-lg shadow">
+                    <h3 class="font-bold text-gray-700 mb-2">LLM Module</h3>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                        <span>Active (mistral:latest)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Connect to WebSocket server
+            const socket = io();
+            const logContainer = document.getElementById('log-container');
+            const terminalOutput = document.getElementById('terminal-output');
+            const terminalInput = document.getElementById('terminal-input');
+
+            // Clear initial message on connection
+            socket.on('connect', function() {
+                logContainer.innerHTML = '';
+                addLogMessage('Connected to server', 'info');
+            });
+
+            // Handle log messages
+            socket.on('log_message', function(data) {
+                addLogMessage(data.message, data.level || 'info');
+            });
+
+            // Handle command results
+            socket.on('command_result', function(data) {
+                const resultElement = document.createElement('div');
+                resultElement.className = 'result mt-1 mb-2';
+                resultElement.textContent = data.result;
+                terminalOutput.appendChild(resultElement);
+                
+                // Scroll to bottom
+                const terminal = document.getElementById('terminal');
+                terminal.scrollTop = terminal.scrollHeight;
+            });
+
+            // Add log message to the log container
+            function addLogMessage(message, level) {
+                const logEntry = document.createElement('div');
+                logEntry.className = `mb-1 log-${level}`;
+                
+                const timestamp = new Date().toLocaleTimeString();
+                logEntry.innerHTML = `[${timestamp}] ${message}`;
+                
+                logContainer.appendChild(logEntry);
+                
+                // Scroll to bottom
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+
+            // Handle terminal input
+            terminalInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const command = terminalInput.value.trim();
+                    if (command) {
+                        // Add command to output
+                        const commandElement = document.createElement('div');
+                        commandElement.className = 'flex mb-1';
+                        commandElement.innerHTML = `<span class="prompt mr-2">$</span><span class="command">${command}</span>`;
+                        terminalOutput.appendChild(commandElement);
+                        
+                        // Send command to server
+                        socket.emit('execute_command', { command: command });
+                        
+                        // Clear input
+                        terminalInput.value = '';
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -31,6 +31,27 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize web scraping button
     initializeWebScrapingButton();
+
+    initializeWebSocketConnection();
+    
+    // Add logs link to header
+    const header = document.querySelector('header');
+    if (header) {
+        const logsLink = document.createElement('a');
+        logsLink.href = '/system_logs';
+        logsLink.className = 'btn-secondary px-4 py-2 rounded-lg ml-4';
+        logsLink.innerHTML = '<i class="fas fa-list-alt mr-2"></i> System Logs';
+        
+        // Find or create a container for the links
+        let headerLinks = header.querySelector('.header-links');
+        if (!headerLinks) {
+            headerLinks = document.createElement('div');
+            headerLinks.className = 'header-links flex items-center';
+            header.appendChild(headerLinks);
+        }
+        
+        headerLinks.appendChild(logsLink);
+    }
 });
 
 // Initialize number inputs
@@ -1014,3 +1035,101 @@ function showNotification(message, type = 'info') {
         }, 500);
     }, 4000);
 }
+
+
+// Initialize WebSocket connection
+function initializeWebSocketConnection() {
+    // Check if socket.io is loaded
+    if (typeof io !== 'undefined') {
+        const socket = io();
+        
+        socket.on('connect', function() {
+            console.log('Connected to WebSocket server');
+        });
+        
+        socket.on('log_message', function(data) {
+            console.log(`[${data.level || 'info'}] ${data.message}`);
+            
+            // Update loading message if there's a loading overlay showing
+            const loadingMessage = document.getElementById('loading-message');
+            if (loadingMessage && document.getElementById('loading-overlay').classList.contains('hidden') === false) {
+                loadingMessage.textContent = data.message;
+            }
+        });
+    } else {
+        console.warn('Socket.io not loaded, WebSocket functionality will not be available');
+    }
+}
+
+// Connect to WebSocket server
+const socket = io();
+
+// Initialize terminal
+const terminalPanel = document.getElementById('terminal-panel');
+const terminalHeader = document.getElementById('terminal-header');
+const minimizeTerminal = document.getElementById('minimize-terminal');
+const miniTerminalInput = document.getElementById('mini-terminal-input');
+const miniTerminalOutput = document.getElementById('mini-terminal-output');
+
+// Terminal toggle
+let terminalOpen = false;
+
+terminalHeader.addEventListener('click', function(e) {
+    if (e.target.closest('#minimize-terminal')) return;
+    
+    if (terminalOpen) {
+        terminalPanel.style.transform = 'translateY(100%)';
+    } else {
+        terminalPanel.style.transform = 'translateY(0)';
+    }
+    terminalOpen = !terminalOpen;
+});
+
+minimizeTerminal.addEventListener('click', function() {
+    terminalPanel.style.transform = 'translateY(100%)';
+    terminalOpen = false;
+});
+
+// Handle terminal input
+miniTerminalInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        const command = miniTerminalInput.value.trim();
+        if (command) {
+            // Add command to output
+            const commandElement = document.createElement('div');
+            commandElement.className = 'flex';
+            commandElement.innerHTML = `<span class="text-green-400 mr-2">$</span><span>${command}</span>`;
+            miniTerminalOutput.appendChild(commandElement);
+            
+            // Send command to server
+            socket.emit('execute_command', { command: command });
+            
+            // Clear input
+            miniTerminalInput.value = '';
+        }
+    }
+});
+
+// Handle command results
+socket.on('command_result', function(data) {
+    const resultElement = document.createElement('div');
+    resultElement.className = 'text-blue-300 whitespace-pre-wrap mb-2';
+    resultElement.textContent = data.result;
+    miniTerminalOutput.appendChild(resultElement);
+    
+    // Scroll to bottom
+    const miniTerminal = document.getElementById('mini-terminal');
+    miniTerminal.scrollTop = miniTerminal.scrollHeight;
+});
+
+// Handle log messages for notifications
+socket.on('log_message', function(data) {
+    // Show notifications for important logs
+    if (data.level === 'error') {
+        showError(data.message);
+    } else if (data.level === 'warning') {
+        showNotification(data.message, 'warning');
+    } else if (data.message.includes('complete') || data.message.includes('success')) {
+        showNotification(data.message, 'success');
+    }
+});

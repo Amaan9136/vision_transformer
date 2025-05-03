@@ -7,6 +7,9 @@ from app import flask_app
 
 from CONSTANTS.CONSTANTS import ( USER_AGENTS )
 
+from helpers_and_class.VisionModule import VisionModule
+vision_module = VisionModule()
+
 # ---- 4. Enhanced Web Scraper with Duplicate Detection ----
 
 class ImageScraper:

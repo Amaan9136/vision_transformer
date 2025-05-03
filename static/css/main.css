@@ -119,3 +119,68 @@
         transform: translateX(100%);
     }
 }
+
+
+/* Terminal and logs styling */
+.terminal {
+    font-family: 'Fira Code', monospace, 'Courier New', Courier;
+    background-color: #1e1e1e;
+    color: #f0f0f0;
+    border-radius: 6px;
+    padding: 10px;
+    overflow-y: auto;
+}
+
+.terminal-input {
+    background-color: transparent;
+    border: none;
+    color: #f0f0f0;
+    font-family: inherit;
+    width: 100%;
+    outline: none;
+}
+
+.log-container {
+    height: 300px;
+    overflow-y: auto;
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px;
+    font-family: 'Fira Code', monospace, 'Courier New', Courier;
+    font-size: 0.9rem;
+}
+
+.log-info {
+    color: #0d6efd;
+}
+
+.log-error {
+    color: #dc3545;
+}
+
+.log-warning {
+    color: #ffc107;
+}
+
+.log-success {
+    color: #198754;
+}
+
+/* Add to existing styles */
+.nav-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    text-decoration: none;
+    color: #4f46e5;
+    font-weight: 500;
+    transition: color 0.3s;
+}
+
+.nav-link:hover {
+    color: #312e81;
+}
+
+.nav-link i {
+    margin-right: 0.5rem;
+}
