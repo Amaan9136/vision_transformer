@@ -4,279 +4,492 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vision Transformer</title>
+    <title>Vision Transformer Explorer</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='index.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
 </head>
 
 <body>
     <div class="container mx-auto px-4 py-8">
-        <header class="flex flex-col md:flex-row justify-between items-center mb-10">
-            <div class="flex items-center mb-4 md:mb-0">
-                <i class="fas fa-terminal text-4xl text-indigo-600 mr-4"></i>
-                <h1 class="text-3xl font-bold text-gray-800">Vision Transformer</h1>
+        <!-- Top Navigation -->
+        <nav class="flex flex-wrap items-center justify-between py-4 mb-8">
+            <div class="flex items-center">
+                <i class="fas fa-eye text-4xl text-indigo-600 mr-4"></i>
+                <h1 class="text-3xl font-bold text-gray-800">Vision Transformer Explorer</h1>
             </div>
-
-            <div class="search-bar flex items-center w-full md:w-96 bg-white rounded-full px-4 py-2">
-                <i class="fas fa-search text-gray-400 mr-3"></i>
-                <input type="text" id="search-input" placeholder="Search by object label..."
-                    class="w-full outline-none bg-transparent">
-                <button id="search-btn" class="ml-2 text-indigo-600 hover:text-indigo-800">
-                    <i class="fas fa-arrow-right"></i>
+            <div class="flex items-center space-x-4 mt-4 md:mt-0">
+                <button id="nav-home" class="nav-link active">
+                    <i class="fas fa-home"></i> Home
+                </button>
+                <button id="nav-visualize" class="nav-link">
+                    <i class="fas fa-chart-bar"></i> Visualizations
+                </button>
+                <button id="nav-explain" class="nav-link">
+                    <i class="fas fa-book"></i> Explanations
+                </button>
+                <button id="nav-logs" class="nav-link">
+                    <i class="fas fa-list-alt"></i> Logs
                 </button>
             </div>
-        </header>
+        </nav>
 
-        <div class="tabs flex mb-8">
-            <div class="tab active" data-tab="upload">
-                <i class="fas fa-upload mr-2"></i> Upload
-            </div>
-            <div class="tab" data-tab="url">
-                <i class="fas fa-link mr-2"></i> URL
-            </div>
+        <!-- Search Bar -->
+        <div class="search-bar flex items-center w-full md:w-96 bg-white rounded-full px-4 py-2 mx-auto mb-8">
+            <i class="fas fa-search text-gray-400 mr-3"></i>
+            <input type="text" id="search-input" placeholder="Search by object label..."
+                class="w-full outline-none bg-transparent">
+            <button id="search-btn" class="ml-2 text-indigo-600 hover:text-indigo-800">
+                <i class="fas fa-arrow-right"></i>
+            </button>
         </div>
 
-        <div class="tab-content glass-panel p-6 mb-10">
-            <!-- Upload Tab -->
-            <div id="upload-tab" class="tab-pane">
-                <div class="flex flex-col space-y-4">
-                    <div class="drop-area flex flex-col items-center justify-center h-64 p-6">
-                        <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
-                        <p class="text-gray-500 text-center mb-4">Drag & drop an image here or click to browse</p>
-                        <button id="browse-btn" class="btn-primary px-6 py-2 rounded-full">
-                            Browse Files
-                        </button>
-                        <input type="file" id="file-input" accept="image/*" class="hidden">
-                    </div>
+        <!-- Home Section -->
+        <section id="section-home" class="page-section active">
+            <!-- Tab Navigation for Upload Methods -->
+            <div class="tabs flex mb-8">
+                <div class="tab active" data-tab="upload">
+                    <i class="fas fa-upload mr-2"></i> Upload
+                </div>
+                <div class="tab" data-tab="url">
+                    <i class="fas fa-link mr-2"></i> URL
+                </div>
+            </div>
 
-                    <div class="flex flex-col md:flex-row items-center justify-between mt-4 p-4 bg-gray-50 rounded-lg">
-                        <div class="mb-4 md:mb-0">
-                            <label for="num-images-upload" class="block text-gray-700 text-sm font-medium mb-2">Number
-                                of similar images:</label>
-                            <div class="number-input">
-                                <button class="decrement">-</button>
-                                <input type="number" id="num-images-upload" value="5" min="1" max="20"
-                                    class="form-input">
-                                <button class="increment">+</button>
-                            </div>
-                        </div>
-                        <div class="ml-0 md:ml-4">
-                            <button id="upload-settings-toggle" class="text-indigo-600 text-sm flex items-center">
-                                <i class="fas fa-cog mr-2"></i> Advanced Settings
+            <!-- Upload Section -->
+            <div class="tab-content glass-panel p-6 mb-10">
+                <!-- Upload Tab -->
+                <div id="upload-tab" class="tab-pane">
+                    <div class="flex flex-col space-y-4">
+                        <div class="drop-area flex flex-col items-center justify-center h-64 p-6">
+                            <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                            <p class="text-gray-500 text-center mb-4">Drag & drop an image here or click to browse</p>
+                            <button id="browse-btn" class="btn-primary px-6 py-2 rounded-full">
+                                Browse Files
                             </button>
+                            <input type="file" id="file-input" accept="image/*" class="hidden">
                         </div>
-                    </div>
 
-                    <div id="upload-advanced-settings" class="hidden p-4 bg-gray-50 rounded-lg">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label for="insight-model" class="block text-gray-700 text-sm font-medium mb-2">Insight
-                                    generation model:</label>
-                                <select id="insight-model"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                    <option value="mistral:latest" selected>Mistral (Latest)</option>
-                                    <option value="llama2:latest">Llama 2 (Latest)</option>
-                                </select>
+                        <div class="flex flex-col md:flex-row items-center justify-between mt-4 p-4 bg-gray-50 rounded-lg">
+                            <div class="mb-4 md:mb-0">
+                                <label for="num-images-upload" class="block text-gray-700 text-sm font-medium mb-2">Number
+                                    of similar images:</label>
+                                <div class="number-input">
+                                    <button class="decrement">-</button>
+                                    <input type="number" id="num-images-upload" value="5" min="1" max="20"
+                                        class="form-input">
+                                    <button class="increment">+</button>
+                                </div>
                             </div>
-                            <div>
-                                <label class="block text-gray-700 text-sm font-medium mb-2">Safe Search:</label>
-                                <div class="flex items-center space-x-4">
-                                    <label class="inline-flex items-center">
-                                        <input type="radio" name="safe-search" value="on"
-                                            class="form-radio text-indigo-600" checked>
-                                        <span class="ml-2">On</span>
-                                    </label>
-                                    <label class="inline-flex items-center">
-                                        <input type="radio" name="safe-search" value="off"
-                                            class="form-radio text-indigo-600">
-                                        <span class="ml-2">Off</span>
-                                    </label>
+                            <div class="ml-0 md:ml-4">
+                                <button id="upload-settings-toggle" class="text-indigo-600 text-sm flex items-center">
+                                    <i class="fas fa-cog mr-2"></i> Advanced Settings
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="upload-advanced-settings" class="hidden p-4 bg-gray-50 rounded-lg">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="insight-model" class="block text-gray-700 text-sm font-medium mb-2">Insight
+                                        generation model:</label>
+                                    <select id="insight-model"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                        <option value="mistral:latest" selected>Mistral (Latest)</option>
+                                        <option value="llama2:latest">Llama 2 (Latest)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-gray-700 text-sm font-medium mb-2">Safe Search:</label>
+                                    <div class="flex items-center space-x-4">
+                                        <label class="inline-flex items-center">
+                                            <input type="radio" name="safe-search" value="on"
+                                                class="form-radio text-indigo-600" checked>
+                                            <span class="ml-2">On</span>
+                                        </label>
+                                        <label class="inline-flex items-center">
+                                            <input type="radio" name="safe-search" value="off"
+                                                class="form-radio text-indigo-600">
+                                            <span class="ml-2">Off</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- URL Tab -->
-            <div id="url-tab" class="tab-pane hidden">
-                <div class="flex flex-col space-y-4">
-                    <div class="flex flex-col">
-                        <label class="text-gray-700 mb-2">Image URL</label>
-                        <div class="flex">
-                            <input type="text" id="url-input" placeholder="https://example.com/image.jpg"
-                                class="flex-grow p-3 rounded-l-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <button id="url-btn" class="btn-primary px-6 py-3 rounded-r-lg">
-                                <i class="fas fa-search mr-2"></i> Analyze
-                            </button>
+                <!-- URL Tab -->
+                <div id="url-tab" class="tab-pane hidden">
+                    <div class="flex flex-col space-y-4">
+                        <div class="flex flex-col">
+                            <label class="text-gray-700 mb-2">Image URL</label>
+                            <div class="flex">
+                                <input type="text" id="url-input" placeholder="https://example.com/image.jpg"
+                                    class="flex-grow p-3 rounded-l-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <button id="url-btn" class="btn-primary px-6 py-3 rounded-r-lg">
+                                    <i class="fas fa-search mr-2"></i> Analyze
+                                </button>
+                            </div>
+                            <p id="url-error" class="error-message hidden">Please enter a valid image URL</p>
                         </div>
-                        <p id="url-error" class="error-message hidden">Please enter a valid image URL</p>
-                    </div>
 
-                    <div class="flex flex-col md:flex-row items-center justify-between mt-4 p-4 bg-gray-50 rounded-lg">
-                        <div class="mb-4 md:mb-0">
-                            <label for="num-images-url" class="block text-gray-700 text-sm font-medium mb-2">Number of
-                                similar images:</label>
-                            <div class="number-input">
-                                <button class="decrement">-</button>
-                                <input type="number" id="num-images-url" value="5" min="1" max="20" class="form-input">
-                                <button class="increment">+</button>
+                        <div class="flex flex-col md:flex-row items-center justify-between mt-4 p-4 bg-gray-50 rounded-lg">
+                            <div class="mb-4 md:mb-0">
+                                <label for="num-images-url" class="block text-gray-700 text-sm font-medium mb-2">Number of
+                                    similar images:</label>
+                                <div class="number-input">
+                                    <button class="decrement">-</button>
+                                    <input type="number" id="num-images-url" value="5" min="1" max="20" class="form-input">
+                                    <button class="increment">+</button>
+                                </div>
+                            </div>
+                            <div class="ml-0 md:ml-4">
+                                <button id="url-settings-toggle" class="text-indigo-600 text-sm flex items-center">
+                                    <i class="fas fa-cog mr-2"></i> Advanced Settings
+                                </button>
                             </div>
                         </div>
-                        <div class="ml-0 md:ml-4">
-                            <button id="url-settings-toggle" class="text-indigo-600 text-sm flex items-center">
-                                <i class="fas fa-cog mr-2"></i> Advanced Settings
-                            </button>
-                        </div>
-                    </div>
 
-                    <div id="url-advanced-settings" class="hidden p-4 bg-gray-50 rounded-lg">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label for="url-insight-model"
-                                    class="block text-gray-700 text-sm font-medium mb-2">Insight generation
-                                    model:</label>
-                                <select id="url-insight-model"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                    <option value="mistral:latest" selected>Mistral (Latest)</option>
-                                    <option value="llama2:latest">Llama 2 (Latest)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-gray-700 text-sm font-medium mb-2">Safe Search:</label>
-                                <div class="flex items-center space-x-4">
-                                    <label class="inline-flex items-center">
-                                        <input type="radio" name="url-safe-search" value="on"
-                                            class="form-radio text-indigo-600" checked>
-                                        <span class="ml-2">On</span>
-                                    </label>
-                                    <label class="inline-flex items-center">
-                                        <input type="radio" name="url-safe-search" value="off"
-                                            class="form-radio text-indigo-600">
-                                        <span class="ml-2">Off</span>
-                                    </label>
+                        <div id="url-advanced-settings" class="hidden p-4 bg-gray-50 rounded-lg">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="url-insight-model"
+                                        class="block text-gray-700 text-sm font-medium mb-2">Insight generation
+                                        model:</label>
+                                    <select id="url-insight-model"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                        <option value="mistral:latest" selected>Mistral (Latest)</option>
+                                        <option value="llama2:latest">Llama 2 (Latest)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-gray-700 text-sm font-medium mb-2">Safe Search:</label>
+                                    <div class="flex items-center space-x-4">
+                                        <label class="inline-flex items-center">
+                                            <input type="radio" name="url-safe-search" value="on"
+                                                class="form-radio text-indigo-600" checked>
+                                            <span class="ml-2">On</span>
+                                        </label>
+                                        <label class="inline-flex items-center">
+                                            <input type="radio" name="url-safe-search" value="off"
+                                                class="form-radio text-indigo-600">
+                                            <span class="ml-2">Off</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="mt-4">
-                        <button id="scan-page-btn" class="btn-secondary px-6 py-2 rounded-full w-full">
-                            <i class="fas fa-globe mr-2"></i> Web Search for Images
-                        </button>
+                        <div class="mt-4">
+                            <button id="scan-page-btn" class="btn-secondary px-6 py-2 rounded-full w-full">
+                                <i class="fas fa-globe mr-2"></i> Web Search for Images
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-        </div>
+            <!-- Results Section -->
+            <div id="results" class="hidden mb-16">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Analysis Results</h2>
 
-        <!-- Results Section -->
-        <div id="results" class="hidden mb-16">
-            <h2 class="text-2xl font-bold text-gray-800 mb-6">Analysis Results</h2>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <!-- Original Image Analysis -->
-                <div class="col-span-1 glass-panel p-6 scale-in" style="animation-delay: 0s;">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Original Image</h3>
-                    <div class="relative mb-4">
-                        <img id="original-image" src="" alt="Original image"
-                            class="w-full h-48 object-cover rounded-lg">
-                    </div>
-                    <div class="mb-2">
-                        <span class="text-gray-600 font-medium">Detected:</span>
-                        <span id="detected-label" class="ml-2 font-bold text-indigo-600"></span>
-                    </div>
-                    <div>
-                        <span class="text-gray-600 font-medium">Confidence:</span>
-                        <span id="confidence-score" class="ml-2"></span>
-                    </div>
-                </div>
-
-                <!-- Knowledge Base Info -->
-                <div id="knowledge-section" class="col-span-2 glass-panel p-6 scale-in knowledge-panel"
-                    style="animation-delay: 0.1s;">
-                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Knowledge Context</h3>
-                    <div id="loading-insights" class="flex items-center justify-center py-8 hidden">
-                        <div class="loader-spinner mr-3"></div>
-                        <p>Generating insights...</p>
-                    </div>
-                    <div id="knowledge-content" class="space-y-4">
-                        <div class="mb-4">
-                            <span class="text-gray-600 font-medium">Type:</span>
-                            <span id="concept-type" class="ml-2"></span>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <!-- Original Image Analysis -->
+                    <div class="col-span-1 glass-panel p-6 scale-in" style="animation-delay: 0s;">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Original Image</h3>
+                        <div class="relative mb-4">
+                            <img id="original-image" src="" alt="Original image"
+                                class="w-full h-48 object-cover rounded-lg">
+                            
+                            <div class="mt-4 flex space-x-2">
+                                <button id="btn-view-attention" class="btn-secondary px-3 py-1 rounded text-xs">
+                                    <i class="fas fa-eye mr-1"></i> View Attention Maps
+                                </button>
+                                <button id="btn-view-features" class="btn-secondary px-3 py-1 rounded text-xs">
+                                    <i class="fas fa-project-diagram mr-1"></i> View Features
+                                </button>
+                            </div>
                         </div>
-                        <div class="mb-4">
-                            <span class="text-gray-600 font-medium">Description:</span>
-                            <p id="concept-description" class="mt-1 text-gray-700"></p>
-                        </div>
-                        <div class="mb-4">
-                            <h4 class="text-gray-600 font-medium mb-2">Facts:</h4>
-                            <ul id="concept-facts" class="list-disc pl-5 text-gray-700"></ul>
+                        <div class="mb-2">
+                            <span class="text-gray-600 font-medium">Detected:</span>
+                            <span id="detected-label" class="ml-2 font-bold text-indigo-600"></span>
                         </div>
                         <div>
-                            <h4 class="text-gray-600 font-medium mb-2">Related Concepts:</h4>
-                            <div id="related-concepts" class="grid grid-cols-2 gap-2"></div>
+                            <span class="text-gray-600 font-medium">Confidence:</span>
+                            <span id="confidence-score" class="ml-2"></span>
                         </div>
-                        <div class="pt-2 text-xs text-gray-500 italic">
-                            <p>Insights generated by AI using <span id="model-used">Mistral</span></p>
+                        <div class="mt-4">
+                            <button id="btn-explain-process" class="w-full btn-primary px-4 py-2 rounded-lg">
+                                <i class="fas fa-info-circle mr-2"></i> Explain Transformer Process
+                            </button>
                         </div>
                     </div>
-                    <div id="no-knowledge" class="hidden text-gray-500 text-center py-4">
-                        No knowledge context found for this concept.
+
+                    <!-- Knowledge Base Info -->
+                    <div id="knowledge-section" class="col-span-2 glass-panel p-6 scale-in knowledge-panel"
+                        style="animation-delay: 0.1s;">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Knowledge Context</h3>
+                        <div id="loading-insights" class="flex items-center justify-center py-8 hidden">
+                            <div class="loader-spinner mr-3"></div>
+                            <p>Generating insights...</p>
+                        </div>
+                        <div id="knowledge-content" class="space-y-4">
+                            <div class="mb-4">
+                                <span class="text-gray-600 font-medium">Type:</span>
+                                <span id="concept-type" class="ml-2"></span>
+                            </div>
+                            <div class="mb-4">
+                                <span class="text-gray-600 font-medium">Description:</span>
+                                <p id="concept-description" class="mt-1 text-gray-700"></p>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="text-gray-600 font-medium mb-2">Facts:</h4>
+                                <ul id="concept-facts" class="list-disc pl-5 text-gray-700"></ul>
+                            </div>
+                            <div>
+                                <h4 class="text-gray-600 font-medium mb-2">Related Concepts:</h4>
+                                <div id="related-concepts" class="grid grid-cols-2 gap-2"></div>
+                            </div>
+                            <div class="pt-2 text-xs text-gray-500 italic">
+                                <p>Insights generated by AI using <span id="model-used">Mistral</span></p>
+                            </div>
+                        </div>
+                        <div id="no-knowledge" class="hidden text-gray-500 text-center py-4">
+                            No knowledge context found for this concept.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transformer Insights Section -->
+                <div id="transformer-insights" class="mt-8 mb-8 glass-panel p-6 hidden">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">Vision Transformer Insights</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="text-lg font-medium text-gray-700 mb-3">How Vision Transformer Processes This Image</h4>
+                            <p id="transformer-insight-text" class="text-gray-600"></p>
+                        </div>
+                        <div id="transformer-visualization" class="bg-gray-50 p-4 rounded-lg">
+                            <img id="transformer-pipeline-img" src="" alt="Transformer Pipeline" class="w-full rounded-lg">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attention Maps Dialog -->
+                <div id="attention-maps-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-6 max-w-3xl w-full max-h-screen overflow-y-auto">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-bold">Attention Maps</h3>
+                            <button id="close-attention-dialog" class="text-gray-500 hover:text-gray-700">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div id="attention-maps-content" class="space-y-4">
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <h4 class="text-lg font-medium text-gray-700 mb-3">Combined Attention</h4>
+                                <img id="combined-attention-map" src="" alt="Combined Attention Map" class="w-full rounded-lg">
+                            </div>
+                            <div>
+                                <h4 class="text-lg font-medium text-gray-700 mb-3">Explanation</h4>
+                                <p id="attention-explanation" class="text-gray-600"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature Maps Dialog -->
+                <div id="feature-maps-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-6 max-w-3xl w-full max-h-screen overflow-y-auto">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-bold">Feature Maps</h3>
+                            <button id="close-feature-dialog" class="text-gray-500 hover:text-gray-700">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div id="feature-maps-content" class="space-y-4">
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <img id="feature-maps-img" src="" alt="Feature Maps" class="w-full rounded-lg">
+                            </div>
+                            <div>
+                                <h4 class="text-lg font-medium text-gray-700 mb-3">Explanation</h4>
+                                <p id="feature-explanation" class="text-gray-600"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Similar Images Section -->
+                <div class="mt-10">
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="flex items-center">
+                            <h3 class="text-xl font-semibold text-gray-800 mr-3">Similar Images</h3>
+                            <div class="number-input">
+                                <button class="decrement">-</button>
+                                <input type="number" id="num-images-results" value="5" min="1" max="20" class="form-input">
+                                <button class="increment">+</button>
+                            </div>
+                        </div>
+                        <div id="scrape-button-container" class="flex">
+                            <button id="scrape-more-images"
+                                class="btn-secondary px-4 py-2 text-sm rounded-full flex items-center">
+                                <i class="fas fa-globe-americas mr-2"></i> Find More Similar Images
+                            </button>
+                        </div>
+                    </div>
+                    <div id="similar-loading" class="hidden text-center py-8">
+                        <div class="loader-spinner mx-auto mb-4"></div>
+                        <p>Fetching similar images...</p>
+                    </div>
+                    <div id="similar-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        <!-- Similar images will be added here -->
+                    </div>
+                    <div id="no-similar" class="hidden text-gray-500 text-center py-8">
+                        No similar images found.
                     </div>
                 </div>
             </div>
 
-            <!-- Similar Images Section -->
-            <div class="mt-10">
+            <!-- Search Results -->
+            <div id="search-results" class="hidden mb-16">
                 <div class="flex justify-between items-center mb-6">
-                    <div class="flex items-center">
-                        <h3 class="text-xl font-semibold text-gray-800 mr-3">Similar Images</h3>
-                        <div class="number-input">
-                            <button class="decrement">-</button>
-                            <input type="number" id="num-images-results" value="5" min="1" max="20" class="form-input">
-                            <button class="increment">+</button>
+                    <h2 class="text-2xl font-bold text-gray-800">Search Results</h2>
+                    <button id="clear-search" class="text-indigo-600 hover:text-indigo-800">
+                        <i class="fas fa-times mr-1"></i> Clear
+                    </button>
+                </div>
+
+                <div id="search-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    <!-- Search results will be added here -->
+                </div>
+                <div id="no-results" class="hidden text-gray-500 text-center py-8">
+                    No results found. Try a different search term.
+                </div>
+            </div>
+        </section>
+
+        <!-- Visualize Section -->
+        <section id="section-visualize" class="page-section hidden">
+            <div class="glass-panel p-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Vision Transformer Visualizations</h2>
+                
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                    <p class="text-gray-600 mb-4 md:mb-0 md:w-2/3">
+                        Explore how Vision Transformers process and understand images through visualizations of attention mechanisms and feature representations.
+                    </p>
+                    <div>
+                        <select id="visualization-type" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="attention">Attention Mechanism</option>
+                            <option value="features">Feature Maps</option>
+                            <option value="pipeline">Transformation Pipeline</option>
+                            <option value="comparison">CNN Comparison</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="visualization-container" class="bg-gray-50 p-6 rounded-lg">
+                    <div id="visualization-image" class="flex justify-center mb-6">
+                        <img src="/static/images/vit_architecture.png" alt="Vision Transformer Architecture" class="max-w-full rounded-lg shadow-lg">
+                    </div>
+                    
+                    <div id="visualization-explanation" class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">How Attention Works in Vision Transformers</h3>
+                        <p class="text-gray-600">
+                            Vision Transformers process images by dividing them into fixed-size patches and treating them as a sequence. 
+                            The self-attention mechanism allows the model to focus on the most relevant parts of the image for the task at hand.
+                            Unlike Convolutional Neural Networks (CNNs), Vision Transformers can see the entire image at once, enabling
+                            global context awareness.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Explanations Section -->
+        <section id="section-explain" class="page-section hidden">
+            <div class="glass-panel p-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Vision Transformer Explanations</h2>
+                
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                    <p class="text-gray-600 mb-4 md:mb-0 md:w-2/3">
+                        Understand the inner workings of Vision Transformers and how they compare to traditional computer vision models.
+                    </p>
+                    <div>
+                        <select id="explanation-type" class="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="general">General Overview</option>
+                            <option value="attention">Attention Mechanism</option>
+                            <option value="comparison">Comparison with CNNs</option>
+                            <option value="tasks">Task-Specific Insights</option>
+                            <option value="deployment">Deployment Considerations</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="explanation-container" class="bg-gray-50 p-6 rounded-lg">
+                    <div id="explanation-content">
+                        <!-- Explanation content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Logs Section -->
+        <section id="section-logs" class="page-section hidden">
+            <div class="glass-panel p-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">System Logs</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Log Messages</h3>
+                        <div id="log-container" class="log-container">
+                            <div class="text-gray-500 italic">Connecting to log stream...</div>
                         </div>
                     </div>
-                    <div id="scrape-button-container" class="flex">
-                        <button id="scrape-more-images"
-                            class="btn-secondary px-4 py-2 text-sm rounded-full flex items-center">
-                            <i class="fas fa-globe-americas mr-2"></i> Find More Similar Images
-                        </button>
+
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Terminal</h3>
+                        <div id="terminal" class="terminal">
+                            <div class="mb-2">Terminal v1.0.0</div>
+                            <div class="mb-2">Type 'help' to see available commands.</div>
+                            <div id="terminal-output"></div>
+                            <div class="flex">
+                                <span class="prompt mr-2">$</span>
+                                <input type="text" id="terminal-input" class="terminal-input" autofocus
+                                    placeholder="Enter command...">
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div id="similar-loading" class="hidden text-center py-8">
-                    <div class="loader-spinner mx-auto mb-4"></div>
-                    <p>Fetching similar images...</p>
+                
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4">System Status</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="p-4 bg-white rounded-lg shadow">
+                            <h4 class="font-bold text-gray-700 mb-2">Vision Module</h4>
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                                <span>Active</span>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-white rounded-lg shadow">
+                            <h4 class="font-bold text-gray-700 mb-2">Vector Database</h4>
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                                <span>Connected</span>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-white rounded-lg shadow">
+                            <h4 class="font-bold text-gray-700 mb-2">LLM Module</h4>
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                                <span>Active (mistral:latest)</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div id="similar-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    <!-- Similar images will be added here -->
-                </div>
-                <div id="no-similar" class="hidden text-gray-500 text-center py-8">
-                    No similar images found.
-                </div>
             </div>
-        </div>
-
-        <!-- Search Results -->
-        <div id="search-results" class="hidden mb-16">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-gray-800">Search Results</h2>
-                <button id="clear-search" class="text-indigo-600 hover:text-indigo-800">
-                    <i class="fas fa-times mr-1"></i> Clear
-                </button>
-            </div>
-
-            <div id="search-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                <!-- Search results will be added here -->
-            </div>
-            <div id="no-results" class="hidden text-gray-500 text-center py-8">
-                No results found. Try a different search term.
-            </div>
-        </div>
+        </section>
 
         <!-- Loading Overlay -->
         <div id="loading-overlay"
@@ -287,6 +500,7 @@
             </div>
         </div>
 
+        <!-- Terminal Panel -->
         <div id="terminal-panel"
             class="fixed bottom-0 right-0 w-96 bg-gray-900 text-white rounded-t-lg shadow-lg transform translate-y-full transition-transform duration-300">
             <div class="p-2 bg-gray-800 rounded-t-lg cursor-pointer flex justify-between items-center"
@@ -315,8 +529,7 @@
         </div>
 
     </div>
-
-    <script src="/static/js/main.js"></script>
+    <script src="../static/js/main.js"></script>
 </body>
 
 </html>
