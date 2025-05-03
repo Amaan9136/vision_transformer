@@ -1,6 +1,4 @@
 """
-Enhanced Vision Knowledge Explorer
-
 This updated version adds:
 1. Improved image deduplication with perceptual hashing
 2. Visualization of Vision Transformer attention maps
@@ -17,6 +15,8 @@ from CONSTANTS.MODULES import (
     urllib, logger, string, socketio, SocketIO,
 )
 
+from config import flask_app
+
 # Import custom modules
 from helpers_and_class.VisionModule import VisionModule
 from helpers_and_class.VectorDB import VectorDB
@@ -24,26 +24,13 @@ from helpers_and_class.ImageScraper import ImageScraper
 from helpers_and_class.LLMInsightGenerator import LLMInsightGenerator
 from helpers_and_class.TransformerExplainerModule import TransformerExplainerModule
 
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# Initialize Flask app
-flask_app = Flask(__name__)
-flask_app.config['UPLOAD_FOLDER'] = 'static/uploads'
-flask_app.config['ATTENTION_MAPS_FOLDER'] = 'static/attention_maps'
-flask_app.config['FEATURE_MAPS_FOLDER'] = 'static/feature_maps'
-flask_app.config['TRANSFORMATION_FOLDER'] = 'static/transformations'
-flask_app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
-
 # Initialize SocketIO
 socketio = SocketIO(flask_app, cors_allowed_origins="*")
 
-# Ensure upload directories exist
-os.makedirs(flask_app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(flask_app.config['ATTENTION_MAPS_FOLDER'], exist_ok=True)
-os.makedirs(flask_app.config['FEATURE_MAPS_FOLDER'], exist_ok=True)
-os.makedirs(flask_app.config['TRANSFORMATION_FOLDER'], exist_ok=True)
 
 # Initialize modules
 vision_module = VisionModule()
@@ -100,7 +87,7 @@ def log_to_client(message, level='info'):
     socketio.emit('log_message', {'message': message, 'level': level})
 
 
-# Flask routes for the Vision Transformer Explorer application
+# Flask routes for the Vision Transformer application
 
 @flask_app.route('/')
 def index():
@@ -880,7 +867,7 @@ def handle_command(data):
     elif command.startswith('version'):
         # Return version info
         socketio.emit('command_result', {
-            'result': "Vision Knowledge Explorer v1.0.0"
+            'result': "Vision Transformer v1.0.0"
         })
     else:
         # Unknown command

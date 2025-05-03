@@ -3,12 +3,12 @@ from CONSTANTS.MODULES import (
     concurrent, BytesIO, Image, imagehash, BeautifulSoup
 )
 
-from app import flask_app
-
 from CONSTANTS.CONSTANTS import ( USER_AGENTS )
 
 from helpers_and_class.VisionModule import VisionModule
 vision_module = VisionModule()
+
+from config import flask_app
 
 # ---- 4. Enhanced Web Scraper with Duplicate Detection ----
 

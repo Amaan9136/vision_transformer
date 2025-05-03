@@ -7,7 +7,7 @@ from CONSTANTS.MODULES import (
 
 from CONSTANTS.CONSTANTS import ( USER_AGENTS )
 
-from app import flask_app
+from config import flask_app
 
 # ---- 1. Enhanced Vision Transformer Setup ----
 

@@ -1,5 +1,3 @@
-// Main JavaScript for Vision Knowledge Explorer
-
 // DOM Content Loaded Event
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize animation effects
